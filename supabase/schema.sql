@@ -61,6 +61,12 @@ create table public.organizations (
   purge_at              timestamptz,
   deletion_requested_by uuid        references public.profiles(id) on delete set null,
   deletion_backup_path  text,
+  plan_tier             text        not null default 'free'
+                        check (plan_tier in ('free', 'level1', 'full')),
+  plan_started_at       timestamptz not null default now(),
+  plan_expires_at       timestamptz,
+  imported_rows_count   int         not null default 0,
+  imported_rows_period_start timestamptz not null default now(),
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
@@ -185,6 +191,62 @@ returns boolean language sql security definer stable as $$
       and role    = 'owner'
       and status  = 'active'
   );
+$$;
+
+-- org_effective_plan_tier: a grandfathered/expired plan silently reverts to
+-- 'free' once plan_expires_at is in the past — lazy check, no cron needed.
+create or replace function public.org_effective_plan_tier(p_org_id uuid)
+returns text language sql security definer stable as $$
+  select case
+    when o.plan_expires_at is not null and o.plan_expires_at < now() then 'free'
+    else o.plan_tier
+  end
+  from public.organizations o
+  where o.id = p_org_id;
+$$;
+
+-- org_plan_at_least: true if the org's effective tier meets p_min_tier.
+create or replace function public.org_plan_at_least(p_org_id uuid, p_min_tier text)
+returns boolean language sql security definer stable as $$
+  select case public.org_effective_plan_tier(p_org_id)
+    when 'full'   then true
+    when 'level1' then p_min_tier in ('free', 'level1')
+    else               p_min_tier = 'free'
+  end;
+$$;
+
+-- increment_import_count: atomically bumps organizations.imported_rows_count
+-- so the free-tier 100-row/month Import cap can't be raced by concurrent
+-- imports. Rolls the counter over (reset, not add) when the calendar month
+-- has changed since imported_rows_period_start — lazy, no cron needed.
+create or replace function public.increment_import_count(p_org_id uuid, p_count int)
+returns int language plpgsql security definer as $$
+declare
+  v_new_count    int;
+  v_period_start timestamptz;
+begin
+  if not public.is_org_member(p_org_id) then
+    raise exception 'not a member of this organization';
+  end if;
+
+  select imported_rows_period_start into v_period_start
+  from public.organizations where id = p_org_id;
+
+  if date_trunc('month', now()) <> date_trunc('month', v_period_start) then
+    update public.organizations
+    set imported_rows_count        = greatest(p_count, 0),
+        imported_rows_period_start = now()
+    where id = p_org_id
+    returning imported_rows_count into v_new_count;
+  else
+    update public.organizations
+    set imported_rows_count = imported_rows_count + greatest(p_count, 0)
+    where id = p_org_id
+    returning imported_rows_count into v_new_count;
+  end if;
+
+  return v_new_count;
+end;
 $$;
 
 -- is_admin: owner or admin in ANY active org — used by tables without org_id.
@@ -2782,6 +2844,10 @@ end;
 $$;
 
 grant execute on function public.restore_org(uuid) to authenticated;
+
+grant execute on function public.org_effective_plan_tier(uuid) to authenticated;
+grant execute on function public.org_plan_at_least(uuid, text) to authenticated;
+grant execute on function public.increment_import_count(uuid, int) to authenticated;
 
 -- purge_org: permanently deletes all org data.
 -- Called by service-role Edge Function after purge_at.

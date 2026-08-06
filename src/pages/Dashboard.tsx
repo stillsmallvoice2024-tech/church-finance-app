@@ -33,6 +33,7 @@ import { useWizardAutoShow }       from '../components/onboarding/SetupWizard'
 import { OnboardingChecklist }     from '../components/onboarding/OnboardingChecklist'
 import { HelpButton }              from '../components/onboarding/HelpButton'
 import { AnnouncementBanner }      from '../components/onboarding/AnnouncementBanner'
+import { FreeTierUpsellBanner }    from '../components/onboarding/FreeTierUpsellBanner'
 import { useFirstVisitTour }       from '../hooks/useFirstVisitTour'
 import { useRole }                 from '../hooks/useRole'
 import { PageHelpBanner }          from '../components/ui/PageHelpBanner'
@@ -219,6 +220,9 @@ export default function Dashboard() {
 
         {/* ── Announcement banner ───────────────────────────────────────────── */}
         <AnnouncementBanner />
+
+        {/* ── Free-tier upsell ──────────────────────────────────────────────── */}
+        <FreeTierUpsellBanner />
 
         {/* ── Viewer orientation banner (first-visit only) ──────────────── */}
         {role === 'viewer' && (

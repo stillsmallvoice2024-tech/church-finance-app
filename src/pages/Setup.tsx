@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Trash2, Landmark, Layers, LockOpen, Copy, ShieldAlert, Globe, Settings2, TrendingUp, TrendingDown, Users, UserCog } from 'lucide-react'
+import { Trash2, Landmark, Layers, LockOpen, Copy, ShieldAlert, Globe, Settings2, TrendingUp, TrendingDown, Users, UserCog, CreditCard } from 'lucide-react'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { useRole } from '../hooks/useRole'
 import { type DbBank } from '../hooks/useBanks'
@@ -30,8 +30,9 @@ import { CurrenciesTab } from './setup/CurrenciesTab'
 import { IncomeTypesTab } from './setup/IncomeTypesTab'
 import { OutflowTypesTab } from './setup/OutflowTypesTab'
 import { DepartmentsTab } from './setup/DepartmentsTab'
+import { BillingTab } from './setup/BillingTab'
 
-const TABS = ['Account & Preferences', 'General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies'] as const
+const TABS = ['Account & Preferences', 'General', 'Banks', 'Distribution Rules', 'Income Types', 'Outflow Types', 'Departments', 'Currencies', 'Billing'] as const
 type Tab = typeof TABS[number]
 
 const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: string }[] = [
@@ -43,6 +44,7 @@ const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: stri
   { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
   { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
   { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
+  { tab: 'Billing',            Icon: CreditCard,   label: 'Plans & Pricing' },
 ]
 
 // URL slug per tab, so old deep links and redirects land on the right section.
@@ -55,6 +57,7 @@ const TAB_SLUGS: Record<Tab, string> = {
   'Outflow Types':         'outflow-types',
   'Departments':           'departments',
   'Currencies':            'currencies',
+  'Billing':               'billing',
 }
 const SLUG_TO_TAB: Record<string, Tab> = Object.fromEntries(
   Object.entries(TAB_SLUGS).map(([tab, slug]) => [slug, tab as Tab]),
@@ -64,12 +67,14 @@ SLUG_TO_TAB['setup'] = 'General' // legacy /settings?tab=setup links
 // ── Page ──────────────────────────────────────────────────────────────────────────────
 
 export default function SetupPage() {
-  const { canWrite } = useRole()
+  const { canWrite, isOwner } = useRole()
   const write = canWrite()
 
   // Viewers see only Account & Preferences; finance tabs need write access
-  // (same rule the old CanWriteGuard enforced on /setup).
-  const visibleCards = write ? TAB_CARDS : TAB_CARDS.filter(c => c.tab === 'Account & Preferences')
+  // (same rule the old CanWriteGuard enforced on /setup). Billing is
+  // owner-only regardless of write access — it's sensitive account info.
+  const visibleCards = (write ? TAB_CARDS : TAB_CARDS.filter(c => c.tab === 'Account & Preferences'))
+    .filter(c => c.tab !== 'Billing' || isOwner())
 
   // Active tab lives in ?tab= so redirects and onboarding links can deep-link.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -309,6 +314,7 @@ export default function SetupPage() {
               />
             )}
             {activeTab === 'Currencies'     && <CurrenciesTab />}
+            {activeTab === 'Billing'        && <BillingTab />}
           </div>
         </div>
 

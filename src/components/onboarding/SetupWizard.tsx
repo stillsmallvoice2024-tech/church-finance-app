@@ -1,17 +1,18 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import {
   X, ChevronRight, ChevronLeft, Check, Clock, Building2, Landmark,
   ArrowDownCircle, ArrowUpCircle, Users, Upload, Sparkles, Loader2,
   Plus, AlertCircle, CheckCircle2, ExternalLink, SkipForward, Tag,
   Heart, Globe, GraduationCap, Briefcase, Wallet, SlidersHorizontal, Zap,
-  Trash2, Mail,
+  Trash2, Mail, Lock,
 } from 'lucide-react'
 import { useOnboardingStore } from '../../store/onboardingStore'
 import { useUserPreferences } from '../../hooks/useUserPreferences'
 import { useOrgStore } from '../../store/orgStore'
 import { useAuthStore } from '../../store/authStore'
 import { useRole } from '../../hooks/useRole'
+import { usePlan, TIER_SHORT_NAME, FEATURE_TIERS } from '../../hooks/usePlan'
 import { useDepartments, saveDepartment, deleteDepartment } from '../../hooks/useDepartments'
 import { useBanks } from '../../hooks/useBanks'
 import { useAddBank, useAddCategory, useDeleteCategory } from '../../hooks/useMutations'
@@ -96,6 +97,29 @@ function EditLaterNote({ where }: { where: string }) {
     <p className="text-xs text-gray-400 dark:text-gray-500 italic mt-1">
       You can add, rename, or remove these later in {where}.
     </p>
+  )
+}
+
+/**
+ * Shown in place of a step's normal form when the active org's plan doesn't
+ * unlock that step's feature. This is an onboarding-specific UX fix, not a
+ * cap change — these steps are optional/skippable, so a Free-tier org can
+ * still finish onboarding; they just see an upsell instead of either a raw
+ * error (custom rules) or an ungated bypass of the feature (team invites).
+ */
+function PlanLockedNote({ tierLabel, children }: { tierLabel: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3.5 py-3 text-sm">
+      <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+      <div className="text-amber-800 dark:text-amber-200">
+        {children}
+        <div className="mt-1.5">
+          <Link to="/settings?tab=billing" className="font-semibold underline">
+            View plans — move to {tierLabel}
+          </Link>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -408,6 +432,28 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { mutate: addBank } = useAddBank()
   const { push: toast } = useToastStore()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const { hasFeature, quantityLimit } = usePlan()
+  const bankLimit = quantityLimit('multiBank')
+  const atCap = !loading && bankLimit !== null && banks.length >= bankLimit
+  const canUseFx = hasFeature('fx')
+  const fxCurrencyLimit = quantityLimit('fx')
+  const existingForeignCurrencies = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of banks) {
+      if (b.currency && b.currency !== (defaultCurrency ?? 'NGN')) set.add(b.currency)
+    }
+    return set
+  }, [banks, defaultCurrency])
+  const atFxCurrencyCap = fxCurrencyLimit !== null && existingForeignCurrencies.size >= fxCurrencyLimit
+  // Mirrors the same fx-feature/currency-cap restriction as AddBankModal —
+  // this step has its own duplicate currency picker, so it needs its own
+  // check to avoid bypassing the tier's foreign-currency limit during
+  // onboarding.
+  const selectableCurrencies = !canUseFx
+    ? currencies.filter(c => c.code === (defaultCurrency ?? 'NGN'))
+    : atFxCurrencyCap
+      ? currencies.filter(c => c.code === (defaultCurrency ?? 'NGN') || existingForeignCurrencies.has(c.code))
+      : currencies
 
   const [name, setName]         = useState('')
   const [acctNum, setAcctNum]   = useState('')
@@ -443,7 +489,11 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
     <div className="space-y-4">
       <StepHeading
         title="Which bank accounts does your organisation use?"
-        description="Add every account your organisation operates — your main account, a project account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
+        description={
+          bankLimit === 1
+            ? "Add your organisation's bank account. The name you enter here must match your bank statement exactly when you import transactions."
+            : "Add every account your organisation operates — your main account, a project account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
+        }
       />
 
       {!loading && banks.length > 0 && (
@@ -457,6 +507,11 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
         </div>
       )}
 
+      {atCap ? (
+        <PlanLockedNote tierLabel={TIER_SHORT_NAME.level1}>
+          Clariva Start supports 1 bank account, and you've already added yours. Add more once you upgrade.
+        </PlanLockedNote>
+      ) : (
       <form onSubmit={handleAdd} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -487,11 +542,21 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
             onChange={e => setCurrency(e.target.value)}
             className={`${inputCls} flex-1`}
           >
-            {currencies.map(c => (
+            {selectableCurrencies.map(c => (
               <option key={c.code} value={c.code}>{c.code}</option>
             ))}
           </select>
         </div>
+        {!canUseFx && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+            More currencies available on {TIER_SHORT_NAME.level1}.
+          </p>
+        )}
+        {canUseFx && atFxCurrencyCap && (
+          <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+            {TIER_SHORT_NAME.level1} allows one foreign currency across as many banks as you like — move to {TIER_SHORT_NAME.full} for unlimited foreign currencies.
+          </p>
+        )}
         <div className="flex justify-end">
           <button
             type="submit"
@@ -503,6 +568,7 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
           </button>
         </div>
       </form>
+      )}
 
       {!loading && banks.length === 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
@@ -1303,6 +1369,9 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
   const { incomeTypes }                             = useIncomeTypes()
   const { groups, loading: groupsLoading, refetch } = useSpecialConfigGroups()
   const { push: toast }                              = useToastStore()
+  const { quantityLimit } = usePlan()
+  const customRuleLimit = quantityLimit('customDistributionRules')
+  const atCap = customRuleLimit !== null && groups.length >= customRuleLimit
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [openTypeId, setOpenTypeId]   = useState<string | null>(null) // income type whose picker is expanded
@@ -1385,7 +1454,12 @@ function SpecialRulesStep({ onDataReady }: { onDataReady: (ready: boolean) => vo
         description="A special rule overrides the General rule for a specific income type — for example, a &ldquo;Building Fund Drive&rdquo; offering can always go 100% to the Building Fund instead of the regular split. Each income type can have at most one special rule."
       />
 
-      {userTypes.length === 0 ? (
+      {atCap ? (
+        <PlanLockedNote tierLabel={TIER_SHORT_NAME.level1}>
+          Custom distribution rules aren't available on Clariva Start. You can skip this step for now —
+          every income type will use the General rule until you upgrade.
+        </PlanLockedNote>
+      ) : userTypes.length === 0 ? (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
           Add income types in an earlier step to set up special rules here.
         </p>
@@ -1565,6 +1639,8 @@ function TeamMembersStep() {
   const orgType  = useOrgStore(s => s.orgType)
   const content  = getOrgTypeContent(orgType)
   const user     = useAuthStore(s => s.user)
+  const { hasFeature } = usePlan()
+  const canInvite = hasFeature('teamInvites')
   const { push: toast } = useToastStore()
   const [members, setMembers] = useState<{ id: string; email: string; role: string }[]>([])
   const [email,   setEmail]   = useState('')
@@ -1594,6 +1670,9 @@ function TeamMembersStep() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !orgId || !user) return
+    // Authoritative check — the form below is already hidden when this is
+    // false, but this is the actual bottleneck every invite goes through.
+    if (!canInvite) { setError('Inviting team members requires the Growth plan or above.'); return }
     setSaving(true); setError(null); setInviteUrl(null)
 
     const { data: existing } = await supabase
@@ -1658,6 +1737,12 @@ function TeamMembersStep() {
         </div>
       )}
 
+      {!canInvite ? (
+        <PlanLockedNote tierLabel={TIER_SHORT_NAME[FEATURE_TIERS.teamInvites]}>
+          Clariva Start is a single-user plan — inviting your {content.teamRoleLabel} isn't available yet.
+          You can still finish setting up on your own and invite people once you upgrade.
+        </PlanLockedNote>
+      ) : (
       <form onSubmit={handleInvite} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -1703,6 +1788,7 @@ function TeamMembersStep() {
           </button>
         </div>
       </form>
+      )}
 
       {inviteUrl && (
         <div className="flex items-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-xs">

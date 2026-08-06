@@ -28,9 +28,14 @@ export function Layout() {
   }, [])
 
   // Move focus to the page content on SPA navigation so screen-reader and
-  // keyboard users land on the new page instead of the old nav link.
+  // keyboard users land on the new page instead of the old nav link. Also
+  // reset scroll — #main-content is the actual scroll container (overflow-y-
+  // auto), not window, so its scrollTop otherwise carries over from whatever
+  // page was open before, landing users mid-page (or past the fold) on nav.
   useEffect(() => {
-    document.getElementById('main-content')?.focus({ preventScroll: true })
+    const el = document.getElementById('main-content')
+    el?.focus({ preventScroll: true })
+    el?.scrollTo({ top: 0 })
   }, [location.pathname])
 
   return (

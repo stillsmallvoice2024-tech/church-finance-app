@@ -27,6 +27,7 @@ import { RootTransactionSearch, type RootTxnLink } from '../ui/RootTransactionSe
 import { isOffsetableType } from '../../utils/transactionTypes'
 import { autoTagOffsetRoot } from '../../utils/autoTagOffsetRoot'
 import { useToastStore } from '../../store/toastStore'
+import { usePlan, TXN_TYPE_FEATURE } from '../../hooks/usePlan'
 
 // ── Zod schema ─────────────────────────────────────────────────────────────────────────────
 
@@ -85,6 +86,14 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const updateMutation    = useUpdateTransaction('inflow_transactions')
   const updateRootOutflow = useUpdateTransaction('outflow_transactions')
   const { push: toast }   = useToastStore()
+  const { hasFeature }    = usePlan()
+  const visibleTxnTypes = useMemo(
+    () => TXN_TYPES.filter(t => {
+      const feature = TXN_TYPE_FEATURE[t.value]
+      return !feature || hasFeature(feature)
+    }),
+    [hasFeature],
+  )
 
   const { mutate: add,    loading: adding,   error: addError,    reset: resetAdd    } = addMutation
   const { mutate: update, loading: updating, error: updateError, reset: resetUpdate } = updateMutation
@@ -449,7 +458,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         <Field label="Transaction Type" error={errors.transaction_type?.message}
           help="Normal is a regular inflow. Refund/Reversal corrects a prior outflow or entry. Bank Deposit, Intrabank Transfer, and Balance Brought Forward are system types used for reconciliation.">
           <select {...register('transaction_type')} className={inputCls(!!errors.transaction_type)}>
-            {TXN_TYPES.map(t => (
+            {visibleTxnTypes.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>

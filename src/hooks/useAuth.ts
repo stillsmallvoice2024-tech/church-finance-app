@@ -9,7 +9,7 @@ import { useReconciliationStore } from '../store/reconciliationStore'
 import { useHealthStore } from '../store/healthStore'
 import { useFinanceStore } from '../store/financeStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
-import type { OrgStatus, UserProfile, UserRole } from '../types'
+import type { OrgStatus, PlanStatus, PlanTier, UserProfile, UserRole } from '../types'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 const PROFILE_FETCH_TIMEOUT_MS = 10_000
@@ -36,39 +36,78 @@ async function fetchAllOrgMemberships(
   }
   const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
 
-  // Attempt 1: full columns including deletion-lifecycle fields
+  // Row shape shared by attempt 1 (all plan/billing columns) and 1b (only
+  // the columns from the original plan_tier migration) — a single missing
+  // column must never take plan_tier down with it, since a stale/unmigrated
+  // org then reads as tier=null, which resolveEffectiveTier() fails OPEN to
+  // 'full' — silently disabling every gate in the app, not just whichever
+  // column was missing.
+  type PlanFieldsRow = {
+    org_id:        string
+    role:          UserRole
+    organizations: {
+      name:                string
+      onboarding_complete: boolean | null
+      default_currency:    string | null
+      timezone:            string | null
+      status:              OrgStatus | null
+      deleted_at:          string | null
+      purge_at:            string | null
+      metadata:            Record<string, unknown> | null
+      plan_tier:           PlanTier | null
+      plan_expires_at:     string | null
+      imported_rows_count: number | null
+      imported_rows_period_start?: string | null
+      plan_status?:        PlanStatus | null
+      trial_ends_at?:      string | null
+    } | null
+  }
+  const mapPlanFieldsRow = (row: PlanFieldsRow): OrgMembership => ({
+    org_id:              row.org_id,
+    org_name:            row.organizations?.name ?? 'My Organization',
+    role:                row.role,
+    onboarding_complete: row.organizations?.onboarding_complete ?? null,
+    default_currency:    row.organizations?.default_currency ?? null,
+    timezone:            row.organizations?.timezone ?? null,
+    org_status:          row.organizations?.status ?? 'active',
+    org_deleted_at:      row.organizations?.deleted_at ?? null,
+    org_purge_at:        row.organizations?.purge_at ?? null,
+    org_type:            (row.organizations?.metadata?.org_type as string | null) ?? null,
+    plan_tier:           row.organizations?.plan_tier ?? null,
+    plan_expires_at:     row.organizations?.plan_expires_at ?? null,
+    imported_rows_count: row.organizations?.imported_rows_count ?? 0,
+    imported_rows_period_start: row.organizations?.imported_rows_period_start ?? null,
+    plan_status:         row.organizations?.plan_status ?? null,
+    trial_ends_at:       row.organizations?.trial_ends_at ?? null,
+  })
+
+  // Attempt 1: every plan/billing column, including ones from migrations
+  // that may not have landed on this DB yet (imported_rows_period_start,
+  // plan_status, trial_ends_at).
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count,imported_rows_period_start,plan_status,trial_ends_at)`,
     { signal, headers },
   )
 
   if (res1.ok) {
-    const rows = await res1.json() as Array<{
-      org_id:        string
-      role:          UserRole
-      organizations: {
-        name:                string
-        onboarding_complete: boolean | null
-        default_currency:    string | null
-        timezone:            string | null
-        status:              OrgStatus | null
-        deleted_at:          string | null
-        purge_at:            string | null
-        metadata:            Record<string, unknown> | null
-      } | null
-    }>
-    return rows.map(row => ({
-      org_id:              row.org_id,
-      org_name:            row.organizations?.name ?? 'My Organization',
-      role:                row.role,
-      onboarding_complete: row.organizations?.onboarding_complete ?? null,
-      default_currency:    row.organizations?.default_currency ?? null,
-      timezone:            row.organizations?.timezone ?? null,
-      org_status:          row.organizations?.status ?? 'active',
-      org_deleted_at:      row.organizations?.deleted_at ?? null,
-      org_purge_at:        row.organizations?.purge_at ?? null,
-      org_type:            (row.organizations?.metadata?.org_type as string | null) ?? null,
-    }))
+    const rows = await res1.json() as PlanFieldsRow[]
+    return rows.map(mapPlanFieldsRow)
+  }
+
+  // Attempt 1b: only the columns from the original plan_tier migration —
+  // covers an org that hasn't yet run the later import-cap-monthly or
+  // stripe_billing migrations. Keeps plan_tier/plan_expires_at (and every
+  // gate that depends on them) working instead of falling all the way to
+  // attempt 2 below, which drops plan fields entirely.
+  if (res1.status === 400) {
+    const res1b = await fetch(
+      `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count)`,
+      { signal, headers },
+    )
+    if (res1b.ok) {
+      const rows = await res1b.json() as PlanFieldsRow[]
+      return rows.map(mapPlanFieldsRow)
+    }
   }
 
   // Attempt 2: without deletion columns (pre-20260602000001 DBs)

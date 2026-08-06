@@ -12,6 +12,7 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
+import { usePlan, resolveEffectiveTier, resolveEffectiveImportCount, IMPORT_ROWS_PER_MONTH, TXN_TYPE_FEATURE } from '../../hooks/usePlan'
 import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -260,6 +261,14 @@ const TEMPLATES_KEY = 'church-import-templates'
 
 export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, preloadedFile, onPdfFile, onSuccess }: Props) {
   const { baseCurrencySymbol, foreignCurrencies } = useOrgCurrency()
+  const { hasFeature } = usePlan()
+  const visibleTxnTypeOptions = useMemo(
+    () => TXN_TYPE_OPTIONS.filter(o => {
+      const feature = TXN_TYPE_FEATURE[o.value]
+      return !feature || hasFeature(feature)
+    }),
+    [hasFeature],
+  )
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const importCompletedRef = useRef(false)
@@ -1468,14 +1477,41 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       // Apply dup skip filter (allSkipIds comes from pre-import stage only)
-      const inflowToInsert  = allSkipIds.size > 0
+      let inflowToInsert  = allSkipIds.size > 0
         ? inflowRows.filter(r => { const id = r.transaction_ref as string | undefined; return !id || !allSkipIds.has(id) })
         : inflowRows
-      const outflowToInsert = allSkipIds.size > 0
+      let outflowToInsert = allSkipIds.size > 0
         ? outflowRows.filter(r => { const id = r.transaction_id as string | undefined; return !id || !allSkipIds.has(id) })
         : outflowRows
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
+
+      // ── Free-tier import cap (monthly) ────────────────────────────────────────
+      // Cumulative across all imports this calendar month for this org (not
+      // per-file) — otherwise a free user bypasses the cap by re-importing.
+      // Hard-fail the whole import rather than truncating it: nothing is
+      // inserted at all if this file would push the org over the monthly
+      // allowance, so there's no ambiguity about which rows made it in.
+      // resolveEffectiveImportCount mirrors the DB's own month-rollover
+      // check, so a stale pre-rollover count read from the store still
+      // resolves to 0 here.
+      const { planTier, planExpiresAt, importedRowsCount, importedRowsPeriodStart } = useOrgStore.getState()
+      const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
+      const effectiveImportedRowsCount = resolveEffectiveImportCount(importedRowsCount, importedRowsPeriodStart)
+      if (effectiveTier === 'free') {
+        const remaining = Math.max(0, IMPORT_ROWS_PER_MONTH - effectiveImportedRowsCount)
+        const wouldInsert = inflowToInsert.length + outflowToInsert.length
+        if (wouldInsert > remaining) {
+          errors.push(
+            remaining === 0
+              ? `You've reached Clariva Start's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — move to Growth or wait for next month's reset.`
+              : `This statement has ${wouldInsert} row(s) to import but Clariva Start only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — move to Growth for unlimited imports, or split the statement to fit.`,
+          )
+          importCompletedRef.current = true
+          setResult({ imported: 0, skipped: wouldInsert, errors, fallbackIdCount: 0, collisions: [] })
+          return
+        }
+      }
 
       const total = inflowToInsert.length + outflowToInsert.length
       // 250 rows/insert. This is a POST body, unlike the dedup query's
@@ -1572,6 +1608,22 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
       if (outflowToInsert.length > 0) {
         useTransactionSyncStore.getState().bumpOutflow()
+      }
+
+      // Bump the free-tier import counter by rows actually inserted (not
+      // attempted) — failed rows shouldn't count against the allowance.
+      if (effectiveTier === 'free' && imported > 0 && orgId) {
+        const { data: newCount, error: countErr } = await supabase.rpc('increment_import_count', {
+          p_org_id: orgId,
+          p_count:  imported,
+        })
+        if (!countErr && typeof newCount === 'number') {
+          // The RPC may have just reset the counter server-side (month
+          // rollover) — bump the locally-tracked period start to "now" too,
+          // it's always safe since resolveEffectiveImportCount only compares
+          // by calendar month, not exact timestamp.
+          useOrgStore.getState().setImportedRowsCount(newCount, new Date().toISOString())
+        }
       }
 
       importCompletedRef.current = true
@@ -1743,6 +1795,29 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         if (ref && existingFxRefs.has(ref)) { skipped++; return false }
         return true
       })
+
+      // Free-tier import cap (monthly) — same hard-fail-upfront rule as the
+      // bank-statement path above. FX isn't reachable by Free-tier orgs in
+      // the normal flow (fx feature itself requires Level 1+), but this
+      // covers the edge case of a Free org's single bank being flagged FX.
+      {
+        const { planTier, planExpiresAt, importedRowsCount, importedRowsPeriodStart } = useOrgStore.getState()
+        const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
+        const effectiveImportedRowsCount = resolveEffectiveImportCount(importedRowsCount, importedRowsPeriodStart)
+        if (effectiveTier === 'free') {
+          const remaining = Math.max(0, IMPORT_ROWS_PER_MONTH - effectiveImportedRowsCount)
+          if (newFxRows.length > remaining) {
+            errors.push(
+              remaining === 0
+                ? `You've reached Clariva Start's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — move to Growth or wait for next month's reset.`
+                : `This statement has ${newFxRows.length} row(s) to import but Clariva Start only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — move to Growth for unlimited imports.`,
+            )
+            importCompletedRef.current = true
+            setResult({ imported: 0, skipped: newFxRows.length, errors, fallbackIdCount: 0, collisions: [] })
+            return
+          }
+        }
+      }
 
       const BATCH = 100
       for (let i = 0; i < newFxRows.length; i += BATCH) {
@@ -2353,8 +2428,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               const dateIdx   = sheet.headers.findIndex(h => mapping[h] === 'date')
               const descIdx   = sheet.headers.findIndex(h => mapping[h] === 'description')
 
-              const availableInflowTypes  = TXN_TYPE_OPTIONS
-              const availableOutflowTypes = TXN_TYPE_OPTIONS
+              const availableInflowTypes  = visibleTxnTypeOptions
+              const availableOutflowTypes = visibleTxnTypeOptions
 
               // Rows come from the model built at Step 3→4 and are memoized —
               // previously this remapped and re-parsed every row on every

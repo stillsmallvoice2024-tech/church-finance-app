@@ -13,13 +13,14 @@ import { useCurrencies } from '../../hooks/useCurrencies'
 import { useOrgStore } from '../../store/orgStore'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import type { DbBank, StartingBalanceRow, SchemaStatus } from '../../hooks/useBanks'
-import { checkBankStartingBalanceMigration } from '../../hooks/useBanks'
+import { useBanks, checkBankStartingBalanceMigration } from '../../hooks/useBanks'
 import { CurrencyInput } from '../ui/CurrencyInput'
 import { formatCurrency, parseCurrency } from '../../utils/currency'
 import { useToastStore } from '../../store/toastStore'
 import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 import { allocatePercent } from '../../utils/financeMath'
 import { useAllocationStore } from '../../store/allocationStore'
+import { usePlan, TIER_DISPLAY_NAME } from '../../hooks/usePlan'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -75,6 +76,39 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const { categories, refetch: refetchCategories } = useCategories()
   const { currencies } = useCurrencies()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const { hasFeature, quantityLimit } = usePlan()
+  const canUseFx = hasFeature('fx')
+  const fxCurrencyLimit = quantityLimit('fx') // null = unlimited (Impact); 1 = Growth's cap
+  const { banks: existingBanks } = useBanks()
+  // Distinct foreign currencies already committed to elsewhere in the org —
+  // excludes the record being edited so changing its own currency isn't
+  // counted against itself.
+  const existingForeignCurrencies = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of existingBanks) {
+      if (b.id === editRecord?.id) continue
+      if (b.currency && b.currency !== (defaultCurrency ?? 'NGN')) set.add(b.currency)
+    }
+    return set
+  }, [existingBanks, defaultCurrency, editRecord])
+  const atFxCurrencyCap = fxCurrencyLimit !== null && existingForeignCurrencies.size >= fxCurrencyLimit
+  // A bank auto-becomes "foreign currency" just by picking a non-default
+  // currency (see is_foreign_currency below), which then unlocks the FX
+  // import path outside the gated Foreign Currency page — so without the fx
+  // feature, the currency picker itself is restricted to the org's default
+  // (plus whatever currency an existing FX bank was already saved with, so
+  // editing it doesn't silently change its currency out from under it).
+  // Growth has the fx feature but is capped to one distinct foreign
+  // currency across all its banks — once that currency is already in use
+  // elsewhere, new/other banks can only pick the default or that currency.
+  const selectableCurrencies = !canUseFx
+    ? currencies.filter(c => c.code === (defaultCurrency ?? 'NGN') || c.code === editRecord?.currency)
+    : atFxCurrencyCap
+      ? currencies.filter(c =>
+          c.code === (defaultCurrency ?? 'NGN') ||
+          existingForeignCurrencies.has(c.code) ||
+          c.code === editRecord?.currency)
+      : currencies
   const orgId           = useOrgStore(s => s.orgId) ?? ''
   const { push: toast } = useToastStore()
 
@@ -552,7 +586,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
         <Field label="Account Currency">
           <select {...register('currency')} className={`${inputCls(false)} bg-white`}>
-            {currencies.map(c => (
+            {selectableCurrencies.map(c => (
               <option key={c.code} value={c.code}>
                 {c.flag ? `${c.flag} ` : ''}{c.code} — {c.name}
               </option>
@@ -561,6 +595,16 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
           {isForeignCurrencyBank && (
             <p className="text-xs text-amber-600 font-medium mt-0.5">
               Foreign Currency Bank — import transactions will be restricted to FX Inflow / FX Outflow types.
+            </p>
+          )}
+          {!canUseFx && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              More currencies available on {TIER_DISPLAY_NAME.level1}.
+            </p>
+          )}
+          {canUseFx && atFxCurrencyCap && (
+            <p className="text-xs text-gray-400 mt-0.5">
+              {TIER_DISPLAY_NAME.level1} allows one foreign currency across as many banks as you like — move to {TIER_DISPLAY_NAME.full} for unlimited foreign currencies.
             </p>
           )}
         </Field>

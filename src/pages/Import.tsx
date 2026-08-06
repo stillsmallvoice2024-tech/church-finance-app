@@ -26,6 +26,7 @@ import { useAllocationStore, buildVersionIndex } from '../store/allocationStore'
 import { getFinalConfig } from '../utils/configResolver'
 import { friendlyError } from '../utils/friendlyError'
 import { formatCurrency } from '../utils/currency'
+import { formatDate } from '../utils/formatters'
 import { generateFallbackTransactionId } from '../utils/generateTransactionId'
 // inflowTypes import removed — income type classification replaces hardcoded types
 import { useIncomeTypes } from '../hooks/useIncomeTypes'
@@ -37,6 +38,7 @@ import { useOutflowClassificationRules } from '../hooks/useOutflowClassification
 import { classifyOutflow } from '../utils/classifyOutflow'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
+import { usePlan, TXN_TYPE_FEATURE } from '../hooks/usePlan'
 import { SearchableSelect } from '../components/ui/SearchableSelect'
 import { RootTransactionSearch, type RootTxnLink } from '../components/ui/RootTransactionSearch'
 import { isOffsetableType } from '../utils/transactionTypes'
@@ -109,6 +111,7 @@ export default function Import() {
 
   const { banks } = useBanks()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { isFree, importedRowsCount, importRowsRemaining, importResetDate } = usePlan()
   usePageTitle('Import')
   useFirstVisitTour('import')
 
@@ -269,6 +272,21 @@ export default function Import() {
         for review before being committed. Duplicate detection runs automatically — transactions with a
         matching date, amount, and reference are flagged before saving.
       </PageHelpBanner>
+
+      {isFree() && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-4 py-3">
+          <p className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>Clariva Start</strong> imports up to <strong>100 transactions/month</strong> —{' '}
+            {importedRowsCount} of 100 used, {importRowsRemaining()} remaining. Resets {formatDate(importResetDate())}.
+          </p>
+          <Link
+            to="/settings?tab=billing&locked=import"
+            className="shrink-0 text-xs font-semibold text-amber-800 dark:text-amber-200 underline whitespace-nowrap"
+          >
+            Move to Growth for unlimited
+          </Link>
+        </div>
+      )}
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200">
@@ -627,6 +645,7 @@ function ManualEntryForm() {
   const addOutflow = useAddOutflow()
   const updateInflowRoot  = useUpdateTransaction('inflow_transactions')
   const updateOutflowRoot = useUpdateTransaction('outflow_transactions')
+  const { hasFeature } = usePlan()
 
   useEffect(() => { if (!cfgLoaded) fetchConfigs() }, [cfgLoaded, fetchConfigs])
 
@@ -784,7 +803,13 @@ function ManualEntryForm() {
     if (!filteredManualCategories.some(c => c.name === outflowS1)) setOutflowS1('')
   }, [filteredManualCategories, outflowS1])
 
-  const availableTxnTypes = TXN_TYPE_OPTIONS
+  const availableTxnTypes = useMemo(
+    () => TXN_TYPE_OPTIONS.filter(o => {
+      const feature = TXN_TYPE_FEATURE[o.value]
+      return !feature || hasFeature(feature)
+    }),
+    [hasFeature],
+  )
 
   // ── Duplicate check helpers ──────────────────────────────────────────────
   // bankName scopes the check to the selected bank so the same ID in a

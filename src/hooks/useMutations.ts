@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/authStore'
 import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
+import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
 import type { StartingBalanceRow } from './useBanks'
 
 const BULK_CHUNK_SIZE = 500
@@ -868,8 +869,27 @@ export function useAddBank(): MutationHook<AddBankInput, string> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
+      const org = orgPayload()
+
+      // Authoritative cap check — the real enforcement point, since bank
+      // creation has more than one UI entry point (Banks tab, SetupWizard's
+      // onboarding step). UI-level guards exist too for better UX.
+      const { planTier, planExpiresAt } = useOrgStore.getState()
+      const tier  = resolveEffectiveTier(planTier, planExpiresAt)
+      const limit = QUANTITY_LIMITS.multiBank?.[tier] ?? null
+      if (limit !== null) {
+        const { count, error: countErr } = await supabase
+          .from('banks')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', org.org_id)
+        if (countErr) throw countErr
+        if ((count ?? 0) >= limit) {
+          throw new Error(`Your plan allows up to ${limit} bank account${limit === 1 ? '' : 's'} — upgrade to add more.`)
+        }
+      }
+
       const { data, error: err } = await supabase
-        .from('banks').insert({ ...input, ...orgPayload() }).select('id').single()
+        .from('banks').insert({ ...input, ...org }).select('id').single()
       if (err) throw err
       if (!data?.id) throw new Error('No ID returned.')
       logAudit({ userId: user.id, action: 'INSERT', tableName: 'banks', recordId: data.id, newData: input as unknown as Record<string, unknown> })

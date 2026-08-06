@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
-import { Pencil, Trash2, Landmark, AlertCircle, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Pencil, Trash2, Landmark, AlertCircle, Plus, Lock } from 'lucide-react'
 import { useBanks, type DbBank } from '../../hooks/useBanks'
+import { usePlan } from '../../hooks/usePlan'
 import { SetupSearchSort, applySetupSort, BANK_SORT_OPTS } from './shared'
 
 // ── Banks tab ────────────────────────────────────────────────────────────────────
@@ -13,6 +15,19 @@ export function BanksTab({ onAdd, onEdit, onDelete }: {
   const { banks, loading, error } = useBanks()
   const [search, setSearch] = useState('')
   const [sort,   setSort]   = useState('name|asc')
+
+  const navigate = useNavigate()
+  const { quantityLimit } = usePlan()
+  const bankLimit = quantityLimit('multiBank')
+  const atCap = bankLimit !== null && banks.length >= bankLimit
+
+  // Single guarded entry point, mirrors DistributionRulesTab's
+  // guardedNewCustom — the real cap enforcement lives in useAddBank()
+  // (useMutations.ts), this just avoids opening the modal only to fail.
+  const guardedAdd = () => {
+    if (atCap) { navigate('/settings?tab=billing&locked=multiBank'); return }
+    onAdd()
+  }
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -43,13 +58,29 @@ export function BanksTab({ onAdd, onEdit, onDelete }: {
 
   return (
     <div className="max-w-2xl space-y-3">
-      <div className="flex justify-end">
-        <button
-          onClick={onAdd}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add Bank
-        </button>
+      <div className="flex items-center justify-between gap-3">
+        {bankLimit !== null && (
+          <p className={`text-xs ${atCap ? 'text-amber-600 font-medium' : 'text-gray-500'}`}>
+            {banks.length} of {bankLimit} bank{bankLimit === 1 ? '' : 's'} used
+          </p>
+        )}
+        <div className="ml-auto">
+          {atCap ? (
+            <button
+              onClick={guardedAdd}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              <Lock className="w-4 h-4" /> Upgrade for more
+            </button>
+          ) : (
+            <button
+              onClick={guardedAdd}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Add Bank
+            </button>
+          )}
+        </div>
       </div>
 
       {banks.length === 0 ? (

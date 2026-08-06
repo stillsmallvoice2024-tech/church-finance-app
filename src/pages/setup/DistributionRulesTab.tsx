@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Pencil, Trash2, AlertCircle, Plus, Layers, Lock, FileEdit, ChevronDown, Info, Clock, EyeOff, Eye, CheckCircle2 } from 'lucide-react'
 import { useAllocationStore, type AllocationConfig } from '../../store/allocationStore'
 import { useSpecialConfigGroups, archiveGroup, restoreGroup, lockVersion, type SpecialConfigGroupWithVersions } from '../../hooks/useSpecialConfigGroups'
+import { usePlan } from '../../hooks/usePlan'
 import { Modal } from '../../components/ui/Modal'
 import { supabase } from '../../lib/supabase'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
@@ -454,6 +456,24 @@ export function DistributionRulesTab({
   refetchKey:   number
   onRefetch:    () => void
 }) {
+  // Custom distribution rules are quantity-capped per tier (Level 1: 2,
+  // Full: unlimited) rather than gated purely on/off — see QUANTITY_LIMITS
+  // in usePlan.ts. Re-fetches independently of SpecialConfigsTab below,
+  // which is fine: it's the same cheap org-scoped query.
+  const navigate = useNavigate()
+  const { quantityLimit } = usePlan()
+  const { groups: capGroups } = useSpecialConfigGroups()
+  const customRuleLimit = quantityLimit('customDistributionRules')
+  const atCap = customRuleLimit !== null && capGroups.length >= customRuleLimit
+
+  // Single guarded entry point for "create a custom rule" — passed to both
+  // the header button below AND SpecialConfigsTab's own empty-state button,
+  // so the cap can't be bypassed by whichever CTA happens to be visible.
+  const guardedNewCustom = () => {
+    if (atCap) { navigate('/settings?tab=billing&locked=customDistributionRules'); return }
+    onNewCustom()
+  }
+
   return (
     <div className="max-w-3xl space-y-6">
       {/* General rule — always first */}
@@ -473,18 +493,34 @@ export function DistributionRulesTab({
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-gray-800">Custom Rules</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Income-type-specific rules that override the General rule.</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Income-type-specific rules that override the General rule.
+              {customRuleLimit !== null && (
+                <span className={atCap ? 'text-amber-600 font-medium' : ''}>
+                  {' '}{capGroups.length} of {customRuleLimit} used.
+                </span>
+              )}
+            </p>
           </div>
-          <button
-            onClick={onNewCustom}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
-          >
-            <Plus className="w-4 h-4" /> New Custom Rule
-          </button>
+          {atCap ? (
+            <button
+              onClick={guardedNewCustom}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+            >
+              <Lock className="w-4 h-4" /> Upgrade for more
+            </button>
+          ) : (
+            <button
+              onClick={guardedNewCustom}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-light transition-colors"
+            >
+              <Plus className="w-4 h-4" /> New Custom Rule
+            </button>
+          )}
         </div>
         <SpecialConfigsTab
           key={refetchKey}
-          onNew={onNewCustom}
+          onNew={guardedNewCustom}
           onNewVersion={onNewVersion}
           onAmend={onAmend}
           onEditDraft={onEditDraft}
