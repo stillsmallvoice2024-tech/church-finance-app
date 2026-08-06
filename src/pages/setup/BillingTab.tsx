@@ -20,7 +20,8 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
   import:                  'Bank statement import',
   multiBank:               'Multiple bank accounts',
   fx:                      'Foreign currency & FX tracking',
-  reports:                 'Report Centre',
+  reports:                 'Standard Reports',
+  boardReport:             'Board Report',
   receipts:                'Receipt attachments',
   reconciliation:          'Reconciliation Centre',
   teamInvites:             'Team invites',
@@ -84,7 +85,7 @@ export function BillingTab() {
       { label: 'Unlimited bank accounts' },
       { label: 'Foreign currency & FX tracking' },
       { label: 'Unlimited statement import', sub: 'No monthly row cap' },
-      { label: 'Report Centre' },
+      { label: 'Standard Reports' },
       { label: 'Receipt attachments' },
       { label: 'Reconciliation Centre' },
       {
@@ -97,6 +98,7 @@ export function BillingTab() {
     ],
     full: [
       { label: 'Unlimited custom distribution rules', sub: `No cap — Level 1 is limited to ${customRuleCap}` },
+      { label: 'Board Report' },
       { label: 'Custom report builder' },
       { label: 'Bulk fund reallocation' },
       { label: 'Refunds, reversals & pending deductions' },

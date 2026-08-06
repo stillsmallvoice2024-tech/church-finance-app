@@ -10,6 +10,7 @@ export type PlanFeature =
   | 'multiBank'
   | 'fx'
   | 'reports'
+  | 'boardReport'
   | 'receipts'
   | 'reconciliation'
   | 'teamInvites'
@@ -27,6 +28,7 @@ export const FEATURE_TIERS: Record<PlanFeature, PlanTier> = {
   multiBank:                'level1',
   fx:                       'level1',
   reports:                  'level1',
+  boardReport:              'full',
   receipts:                 'level1',
   reconciliation:           'level1',
   teamInvites:              'level1',
