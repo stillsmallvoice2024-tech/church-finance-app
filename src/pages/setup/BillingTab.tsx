@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Mail, AlertCircle, Check, Loader2, Settings } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
+import { ContactEmailModal, type EmailDraft } from '../../components/modals/ContactEmailModal'
 import { supabase } from '../../lib/supabase'
 import { useOrgStore } from '../../store/orgStore'
 import { useToastStore } from '../../store/toastStore'
@@ -51,23 +52,25 @@ const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 // either way, so email keeps working as a fallback even after Stripe is on.
 const STRIPE_BILLING_ENABLED = false
 
-function planChangeMailto(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): string {
+function planChangeEmail(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): EmailDraft {
   const action = TIER_RANK[targetTier] > TIER_RANK[currentTier] ? 'Upgrade' : 'Downgrade'
-  const subject = encodeURIComponent(`${action} to ${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`)
-  const body = encodeURIComponent(
-    `Hi,\n\nI'd like to ${action.toLowerCase()} our organisation from ${TIER_DISPLAY_NAME[currentTier]} to ` +
-    `${TIER_DISPLAY_NAME[targetTier]}.\n\nOrganisation: ${orgName ?? ''}\n`,
-  )
-  return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
+  return {
+    to:      CONTACT_EMAIL,
+    subject: `${action} to ${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`,
+    body:
+      `Hi,\n\nI'd like to ${action.toLowerCase()} our organisation from ${TIER_DISPLAY_NAME[currentTier]} to ` +
+      `${TIER_DISPLAY_NAME[targetTier]}.\n\nOrganisation: ${orgName ?? ''}\n`,
+  }
 }
 
-function manageBillingMailto(orgName: string | null, currentTier: PlanTier): string {
-  const subject = encodeURIComponent(`Manage billing — ${orgName ?? 'my organisation'}`)
-  const body = encodeURIComponent(
-    `Hi,\n\nI'd like to manage our organisation's billing (update payment method, view invoices, change plan, etc.).\n\n` +
-    `Organisation: ${orgName ?? ''}\nCurrent plan: ${TIER_DISPLAY_NAME[currentTier]}\n`,
-  )
-  return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`
+function manageBillingEmail(orgName: string | null, currentTier: PlanTier): EmailDraft {
+  return {
+    to:      CONTACT_EMAIL,
+    subject: `Manage billing — ${orgName ?? 'my organisation'}`,
+    body:
+      `Hi,\n\nI'd like to manage our organisation's billing (update payment method, view invoices, change plan, etc.).\n\n` +
+      `Organisation: ${orgName ?? ''}\nCurrent plan: ${TIER_DISPLAY_NAME[currentTier]}\n`,
+  }
 }
 
 function formatNaira(amount: number): string {
@@ -85,6 +88,7 @@ export function BillingTab() {
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
   const [pendingTier, setPendingTier] = useState<PlanTier | null>(null)
   const [portalPending, setPortalPending] = useState(false)
+  const [emailDraft, setEmailDraft] = useState<EmailDraft | null>(null)
 
   const orgId          = useOrgStore(s => s.orgId)
   const orgName        = useOrgStore(s => s.orgName)
@@ -301,13 +305,14 @@ export function BillingTab() {
               Manage billing
             </button>
           ) : (
-            <a
-              href={manageBillingMailto(orgName, tier)}
+            <button
+              type="button"
+              onClick={() => setEmailDraft(manageBillingEmail(orgName, tier))}
               className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-dm hover:underline"
             >
               <Mail className="w-3.5 h-3.5" />
               Manage billing
-            </a>
+            </button>
           )
         )}
       </Card>
@@ -380,13 +385,14 @@ export function BillingTab() {
                       Move to {TIER_SHORT_NAME[t]}
                     </button>
                   ) : (
-                    <a
-                      href={planChangeMailto(orgName, tier, t)}
+                    <button
+                      type="button"
+                      onClick={() => setEmailDraft(planChangeEmail(orgName, tier, t))}
                       className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity"
                     >
                       <Mail className="w-3.5 h-3.5" />
                       Move to {TIER_SHORT_NAME[t]}
-                    </a>
+                    </button>
                   )
                 ) : t === 'free' && STRIPE_BILLING_ENABLED ? (
                   <button
@@ -399,13 +405,14 @@ export function BillingTab() {
                     Switch to {TIER_SHORT_NAME[t]}
                   </button>
                 ) : (
-                  <a
-                    href={planChangeMailto(orgName, tier, t)}
+                  <button
+                    type="button"
+                    onClick={() => setEmailDraft(planChangeEmail(orgName, tier, t))}
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
                     <Mail className="w-3.5 h-3.5" />
                     Switch to {TIER_SHORT_NAME[t]}
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
@@ -422,11 +429,24 @@ export function BillingTab() {
       {/* Permanent fallback — stays even once Stripe checkout/portal is live. */}
       <p className="text-xs text-gray-400 dark:text-gray-500">
         Prefer email? Reach us at{' '}
-        <a href={`mailto:${CONTACT_EMAIL}`} className="underline hover:text-primary dark:hover:text-primary-dm">
+        <button
+          type="button"
+          onClick={() => setEmailDraft(manageBillingEmail(orgName, tier))}
+          className="underline hover:text-primary dark:hover:text-primary-dm"
+        >
           {CONTACT_EMAIL}
-        </a>{' '}
+        </button>{' '}
         any time for help with your plan or billing.
       </p>
+
+      {emailDraft && (
+        <ContactEmailModal
+          open
+          onClose={() => setEmailDraft(null)}
+          draft={emailDraft}
+          description="No email app set up? Use Gmail or copy the message below into whatever you use."
+        />
+      )}
     </div>
   )
 }
