@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from './fetchAllRows'
 
 export const BACKUP_VERSION = '2'
 export const APP_VERSION    = '1.0.0'
@@ -243,6 +244,35 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: [],
   },
+  // ── Audit trail ─────────────────────────────────────────────────────────────
+  // These three were previously unregistered: never backed up, yet hard-deleted
+  // by replace mode.  Registering them as `append` both captures them in the
+  // backup and excludes them from DELETE_TABLES, so a restore can never destroy
+  // the record of what the data used to be.
+  {
+    key: 'receipts', label: 'Receipts', module: 'Audit',
+    restorePriority: 90, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: false, optional: true,
+    dependencies: [],
+    notes: 'metadata rows only — the stored files live in the `backups`/receipt buckets and are not part of this backup',
+  },
+  {
+    key: 'audit_log', label: 'Audit Log', module: 'Audit',
+    restorePriority: 91, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: true, optional: true,
+    dependencies: [],
+    notes: 'append-only: never deleted in replace mode',
+  },
+  {
+    key: 'field_changes', label: 'Field Change Log', module: 'Audit',
+    restorePriority: 92, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: true, optional: true,
+    dependencies: [],
+    notes: 'append-only: never deleted in replace mode',
+  },
 ]
 
 /** Backward compat alias */
@@ -341,6 +371,30 @@ export type RestoreSummary = RestoreSummaryV2
 export interface RestoreOptions {
   mode: 'merge' | 'replace'
   restoreUnmanaged: boolean
+  /**
+   * Required to proceed with a `replace` whose preflight reports a shortfall.
+   * The caller must have shown the user exactly how many rows will be lost.
+   */
+  acknowledgeDataLoss?: boolean
+}
+
+export interface ReplacePreflightTable {
+  key: string
+  label: string
+  liveRows: number
+  backupRows: number
+  /** Rows that exist live but are absent from the backup (0 when the backup is a superset). */
+  shortfall: number
+}
+
+export interface ReplacePreflight {
+  /** True when every table to be deleted is fully represented in the backup. */
+  safe: boolean
+  /** Only tables with shortfall > 0, worst first. */
+  shortfalls: ReplacePreflightTable[]
+  totalShortfall: number
+  /** Tables whose live count could not be read — treated as unsafe. */
+  unreadable: string[]
 }
 
 export interface RestoreResultV2 {
@@ -400,19 +454,108 @@ export async function compareRegistryToSchema(): Promise<SchemaCheckResult> {
 
 // ── Backup creation ────────────────────────────────────────────────────────────
 
+/**
+ * Thrown when a table export cannot be proven complete.  Never swallow this —
+ * an unprovable backup that is later restored in `replace` mode destroys the
+ * rows it failed to capture.
+ */
+export class BackupIntegrityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BackupIntegrityError'
+  }
+}
+
+export interface TableFetchResult {
+  rows: Record<string, unknown>[]
+  warnings: string[]
+}
+
+/** PostgREST error for ordering/filtering on a column the table doesn't have. */
+const MISSING_COLUMN_RE = /does not exist|42703|column .* of relation/i
+
+/** Server-side row count for the same scope the export uses. `null` = unreachable. */
+async function countTableRows(tableKey: string, orgId?: string): Promise<number | null> {
+  let q = supabase.from(tableKey).select('*', { count: 'exact', head: true })
+  if (orgId) q = q.eq('org_id', orgId)
+  const { count, error } = await q
+  if (error) return null
+  return count ?? 0
+}
+
+/**
+ * Exports one table in full.
+ *
+ * Paged through `fetchAllRows` because PostgREST enforces a server-side
+ * db-max-rows cap (default 1000, see supabase/config.toml) that silently
+ * overrides any client `.limit()` — a single `.select('*')` returns the first
+ * 1000 rows with no error and no indication that anything was dropped.
+ *
+ * Every export is then asserted against an exact server-side count and the
+ * whole backup is aborted on a shortfall.
+ */
 export async function fetchTableData(
   tableKey: string,
   onProgress?: (status: 'running' | 'done' | 'error', count?: number) => void,
   orgId?: string,
-): Promise<Record<string, unknown>[]> {
+  opts?: { stableKey?: string },
+): Promise<TableFetchResult> {
   onProgress?.('running')
-  let q = supabase.from(tableKey).select('*').limit(100_000)
-  if (orgId) q = q.eq('org_id', orgId)
-  const { data, error } = await q
-  if (error) { onProgress?.('error'); return [] }
-  const rows = (data ?? []) as Record<string, unknown>[]
+  const warnings: string[] = []
+  const stableKey = opts?.stableKey ?? 'id'
+
+  const build = () => {
+    let q = supabase.from(tableKey).select('*')
+    if (orgId) q = q.eq('org_id', orgId)
+    return q
+  }
+
+  // Probe first: distinguishes "table absent / not readable" (skip, warn) from
+  // "table readable but export came back short" (hard fail).
+  const expected = await countTableRows(tableKey, orgId)
+  if (expected === null) {
+    warnings.push(`${tableKey}: not readable (missing table or denied by RLS) — exported as empty.`)
+    onProgress?.('done', 0)
+    return { rows: [], warnings }
+  }
+
+  let { data, error } = await fetchAllRows<Record<string, unknown>>(build, stableKey)
+
+  // Unmanaged tables discovered at runtime may have no `id` column at all; an
+  // ORDER BY on a missing column errors and would otherwise export as empty.
+  // Fall back to one unordered page — the count assertion below still refuses
+  // to let a >1-page table through on that path.
+  if (error && MISSING_COLUMN_RE.test(error.message)) {
+    warnings.push(
+      `${tableKey}: no '${stableKey}' column — paged export unavailable, fell back to a single unordered page.`,
+    )
+    const single = await build()
+    data  = (single.data ?? []) as Record<string, unknown>[]
+    error = single.error
+  }
+
+  if (error) {
+    onProgress?.('error')
+    throw new BackupIntegrityError(`${tableKey}: export failed — ${error.message}`)
+  }
+
+  const rows = data ?? []
+
+  if (rows.length < expected) {
+    // Re-count before failing: a concurrent delete between probe and export is
+    // a legitimate reason for a shortfall, truncation is not.
+    const recount = await countTableRows(tableKey, orgId)
+    if (recount === null || rows.length < recount) {
+      onProgress?.('error')
+      throw new BackupIntegrityError(
+        `${tableKey}: exported ${rows.length} of ${recount ?? expected} rows. ` +
+        'Backup aborted — an incomplete backup restored in replace mode would delete the missing rows.',
+      )
+    }
+  }
+
   onProgress?.('done', rows.length)
-  return rows
+  return { rows, warnings }
 }
 
 export type BackupProgressCallback = (
@@ -456,19 +599,22 @@ export async function createBackup(
   const managed: Record<string, Record<string, unknown>[]> = {}
   for (const def of MANAGED_TABLES.filter(t => t.backupEnabled)) {
     const tableOrgId = (def.orgScoped && orgId) ? orgId : undefined
-    const rows = await fetchTableData(def.key, (status, count) => {
+    // Page on the table's own PK — `currencies` keys on `code`, not `id`.
+    const res = await fetchTableData(def.key, (status, count) => {
       onProgress?.('managed', def.key, status, count)
-    }, tableOrgId)
-    managed[def.key] = rows
+    }, tableOrgId, { stableKey: def.conflictColumn })
+    managed[def.key] = res.rows
+    warnings.push(...res.warnings)
   }
 
   // 3. Export unmanaged tables (raw, unverified — no org filter, rely on RLS)
   const unmanaged: Record<string, Record<string, unknown>[]> = {}
   for (const tableKey of unmanagedKeys) {
-    const rows = await fetchTableData(tableKey, (status, count) => {
+    const res = await fetchTableData(tableKey, (status, count) => {
       onProgress?.('unmanaged', tableKey, status, count)
     })
-    unmanaged[tableKey] = rows
+    unmanaged[tableKey] = res.rows
+    warnings.push(...res.warnings)
   }
 
   return {
@@ -673,6 +819,45 @@ async function deleteFull(table: string, orgId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Server-side snapshot taken before a `replace` restore deletes anything:
+ * compares each to-be-deleted table's live row count against what the backup
+ * actually carries.  A backup that is short — truncated, stale, or taken from
+ * a different org — is the one input that turns `replace` into data loss.
+ */
+export async function preflightReplace(
+  backup: BackupFileV2,
+  orgId: string,
+): Promise<ReplacePreflight> {
+  const shortfalls: ReplacePreflightTable[] = []
+  const unreadable: string[] = []
+
+  for (const tableKey of DELETE_TABLES) {
+    const def = MANAGED_TABLES.find(t => t.key === tableKey)
+    const liveRows = await countTableRows(tableKey, def?.orgScoped !== false ? orgId : undefined)
+    if (liveRows === null) { unreadable.push(tableKey); continue }
+    const backupRows = (backup.managed[tableKey] ?? []).length
+    if (backupRows < liveRows) {
+      shortfalls.push({
+        key: tableKey,
+        label: def?.label ?? tableKey,
+        liveRows,
+        backupRows,
+        shortfall: liveRows - backupRows,
+      })
+    }
+  }
+
+  shortfalls.sort((a, b) => b.shortfall - a.shortfall)
+
+  return {
+    safe: shortfalls.length === 0 && unreadable.length === 0,
+    shortfalls,
+    totalShortfall: shortfalls.reduce((s, t) => s + t.shortfall, 0),
+    unreadable,
+  }
+}
+
 export type RestoreProgressCallback = (
   section: 'managed' | 'unmanaged',
   key: string,
@@ -691,15 +876,37 @@ export async function restoreFromBackup(
   const errors: RestoreResultV2['errors'] = []
 
   // ── Replace: delete in reverse dependency order ──────────────────────────────
+  // receipts / audit_log / field_changes are no longer wiped here — they are
+  // registered as append-mode tables, so DELETE_TABLES excludes them and the
+  // audit trail survives every restore.
   if (options.mode === 'replace') {
-    for (const tableKey of DELETE_TABLES) {
-      try { await deleteFull(tableKey, orgId) } catch { /* non-fatal — table may be empty */ }
+    const preflight = await preflightReplace(backup, orgId)
+    if (!preflight.safe && !options.acknowledgeDataLoss) {
+      const detail = preflight.shortfalls
+        .slice(0, 5)
+        .map(t => `${t.label}: ${t.liveRows.toLocaleString()} live vs ${t.backupRows.toLocaleString()} in backup`)
+        .join('; ')
+      throw new Error(
+        'Replace aborted: the backup holds fewer rows than the live data, so replacing would ' +
+        `permanently delete ${preflight.totalShortfall.toLocaleString()} row(s). ` +
+        (detail ? `${detail}. ` : '') +
+        (preflight.unreadable.length > 0 ? `Could not read live counts for: ${preflight.unreadable.join(', ')}. ` : '') +
+        'Use merge mode, or re-confirm explicitly to proceed.',
+      )
     }
-    // Clear adjacent audit data too — org-scoped for the same reason.
-    for (const extra of ['receipts', 'audit_log', 'field_changes']) {
+
+    for (const tableKey of DELETE_TABLES) {
       try {
-        await supabase.from(extra).delete().eq('org_id', orgId).not('id', 'is', null)
-      } catch { /* non-fatal */ }
+        await deleteFull(tableKey, orgId)
+      } catch (e) {
+        // Never silent: a failed delete is indistinguishable from an empty
+        // table otherwise, and leaves replace mode half-applied.
+        errors.push({
+          table: tableKey,
+          section: 'managed',
+          message: `Replace-mode delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        })
+      }
     }
   }
 

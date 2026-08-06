@@ -156,11 +156,15 @@ describe('backupRestore replace-mode delete is org-scoped', () => {
     expect(code).toContain('deleteFull(tableKey, orgId)')
   })
 
-  it('adjacent audit-data wipe is org-scoped', () => {
-    // receipts / audit_log / field_changes were deleted wholesale.
-    const idx = code.indexOf("for (const extra of ['receipts', 'audit_log', 'field_changes'])")
-    expect(idx).toBeGreaterThanOrEqual(0)
-    expect(code.slice(idx, idx + 260)).toContain(".eq('org_id', orgId)")
+  it('no longer wipes receipts / audit_log / field_changes at all', () => {
+    // These were deleted wholesale by replace mode while never being backed up.
+    // They are now registered append-mode tables, so DELETE_TABLES skips them.
+    expect(code).not.toContain("for (const extra of ['receipts', 'audit_log', 'field_changes'])")
+    for (const t of ['receipts', 'audit_log', 'field_changes']) {
+      const block = code.slice(code.indexOf(`key: '${t}'`), code.indexOf(`key: '${t}'`) + 300)
+      expect(block).toContain("restoreMode: 'append'")
+      expect(block).toContain('backupEnabled: true')
+    }
   })
 })
 
