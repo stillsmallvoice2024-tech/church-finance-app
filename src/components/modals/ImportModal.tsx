@@ -1496,8 +1496,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         if (wouldInsert > remaining) {
           errors.push(
             remaining === 0
-              ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — upgrade to Growth or wait for next month's reset.`
-              : `This statement has ${wouldInsert} row(s) to import but your free plan only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — upgrade to Growth for unlimited imports, or split the statement to fit.`,
+              ? `You've reached Clariva Start's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — move to Growth or wait for next month's reset.`
+              : `This statement has ${wouldInsert} row(s) to import but Clariva Start only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — move to Growth for unlimited imports, or split the statement to fit.`,
           )
           importCompletedRef.current = true
           setResult({ imported: 0, skipped: wouldInsert, errors, fallbackIdCount: 0, collisions: [] })
@@ -1801,8 +1801,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (newFxRows.length > remaining) {
             errors.push(
               remaining === 0
-                ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — upgrade to Growth or wait for next month's reset.`
-                : `This statement has ${newFxRows.length} row(s) to import but your free plan only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — upgrade to Growth for unlimited imports.`,
+                ? `You've reached Clariva Start's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — move to Growth or wait for next month's reset.`
+                : `This statement has ${newFxRows.length} row(s) to import but Clariva Start only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — move to Growth for unlimited imports.`,
             )
             importCompletedRef.current = true
             setResult({ imported: 0, skipped: newFxRows.length, errors, fallbackIdCount: 0, collisions: [] })

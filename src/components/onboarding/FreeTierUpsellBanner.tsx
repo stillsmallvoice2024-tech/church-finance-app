@@ -36,8 +36,8 @@ export function FreeTierUpsellBanner() {
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
           Unlock multi-bank tracking, foreign currency, reports, receipts, reconciliation and team invites on
-          Growth — or go Impact for unlimited custom distribution rules, bulk reallocation, bank movement
-          tracking, backups and audit trail.
+          Clariva Growth — or move to Clariva Impact for unlimited custom distribution rules, bulk
+          reallocation, bank movement tracking, backups and audit trail.
         </p>
         <div className="flex items-center flex-wrap gap-2 mt-2">
           <Link

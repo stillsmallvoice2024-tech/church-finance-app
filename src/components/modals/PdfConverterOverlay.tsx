@@ -26,7 +26,7 @@ export class OcrUpgradeRequiredError extends Error {
   constructor() {
     super(
       'This PDF needs OCR extraction because no native text layer could be read from it — ' +
-      'OCR-based scanned-statement import is available on the Full plan. Upgrade to import this ' +
+      'OCR-based scanned-statement import is available on the Clariva Impact plan. Upgrade to import this ' +
       'file, or ask your bank for an Excel/CSV export.',
     )
     this.name = 'OcrUpgradeRequiredError'
@@ -286,7 +286,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         return
       }
       if (e instanceof OcrUpgradeRequiredError) {
-        setExtractErrorTitle('OCR requires the Full plan')
+        setExtractErrorTitle('OCR requires the Clariva Impact plan')
         setExtractError(e.message)
         setPhase('error')
         return
@@ -882,7 +882,7 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
               className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-500 bg-white border border-gray-200 rounded-lg hover:bg-black/[0.02] transition-colors"
             >
               <Lock className="w-4 h-4" />
-              Re-extract with OCR — Full plan
+              Re-extract with OCR — Impact
             </Link>
           )}
           <div className="flex-1" />

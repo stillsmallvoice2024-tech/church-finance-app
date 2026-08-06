@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import { Card } from '../ui/Card'
-import { usePlan, FEATURE_TIERS, type PlanFeature } from '../../hooks/usePlan'
+import { usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, type PlanFeature } from '../../hooks/usePlan'
 import type { PlanTier } from '../../types'
 
 interface GateProps {
@@ -11,15 +11,13 @@ interface GateProps {
   fallback?: ReactNode
 }
 
-const TIER_LABEL: Record<PlanTier, string> = { free: 'Free', level1: 'Level 1', full: 'Full' }
-
 /** Default fallback shown by the plan gates below when no custom fallback is passed. */
 export function UpsellCard({ requiredTier, locked }: { requiredTier: PlanTier; locked?: PlanFeature }) {
   return (
     <Card variant="outlined" className="flex flex-col items-center gap-2 text-center py-10">
       <Lock className="w-6 h-6 text-gray-400" />
       <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        This feature requires the {TIER_LABEL[requiredTier]} plan
+        This feature requires the {TIER_DISPLAY_NAME[requiredTier]} plan
       </p>
       <Link
         to={`/settings?tab=billing${locked ? `&locked=${locked}` : ''}`}

@@ -157,7 +157,7 @@ export function BillingTab() {
       { label: 'Invite your team', sub: 'Admin, accountant & viewer roles' },
     ],
     full: [
-      { label: 'Unlimited custom distribution rules', sub: `No cap — Level 1 is limited to ${customRuleCap}` },
+      { label: 'Unlimited custom distribution rules', sub: `No cap — Growth is limited to ${customRuleCap}` },
       { label: 'Board Report' },
       { label: 'Custom report builder' },
       { label: 'Bulk fund reallocation' },

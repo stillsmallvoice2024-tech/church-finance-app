@@ -428,7 +428,7 @@ export default function Settings() {
           </p>
           {!canBackupRestore && (
             <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2">
-              Backup &amp; Restore require the Impact plan.{' '}
+              Backup &amp; Restore require the Clariva Impact plan.{' '}
               <Link to="/settings?tab=billing&locked=backupRestore" className="underline font-medium">Move to Impact</Link>
             </p>
           )}

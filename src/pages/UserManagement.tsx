@@ -725,7 +725,7 @@ export default function UserManagement() {
       </div>
 
       {!canInvite && (
-        <PageHelpBanner storageKey="help-dismissed-users-invite-locked" title="Inviting team members requires Level 1">
+        <PageHelpBanner storageKey="help-dismissed-users-invite-locked" title="Inviting team members requires Clariva Growth">
           Clariva Start is a single-user plan. Move to Clariva Growth to invite admins, accountants and
           viewers onto your organisation.
         </PageHelpBanner>
