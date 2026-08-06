@@ -13,7 +13,7 @@ export type PlanFeature =
   | 'receipts'
   | 'reconciliation'
   | 'teamInvites'
-  | 'specialConfigs'
+  | 'customDistributionRules'
   | 'dynamicReports'
   | 'bulkReallocation'
   | 'adjustments'
@@ -23,21 +23,42 @@ export type PlanFeature =
   | 'ocrImport'
 
 export const FEATURE_TIERS: Record<PlanFeature, PlanTier> = {
-  import:           'free',
-  multiBank:        'level1',
-  fx:               'level1',
-  reports:          'level1',
-  receipts:         'level1',
-  reconciliation:   'level1',
-  teamInvites:      'level1',
-  specialConfigs:   'full',
-  dynamicReports:   'full',
-  bulkReallocation: 'full',
-  adjustments:      'full',
-  bankMovement:     'full',
-  changeLog:        'full',
-  backupRestore:    'full',
-  ocrImport:        'full',
+  import:                   'free',
+  multiBank:                'level1',
+  fx:                       'level1',
+  reports:                  'level1',
+  receipts:                 'level1',
+  reconciliation:           'level1',
+  teamInvites:              'level1',
+  customDistributionRules:  'level1',
+  dynamicReports:           'full',
+  bulkReallocation:         'full',
+  adjustments:              'full',
+  bankMovement:             'full',
+  changeLog:                'full',
+  backupRestore:            'full',
+  ocrImport:                'full',
+}
+
+// Some features aren't simply on/off per tier — they're available starting a
+// given tier but capped at a smaller quantity until a higher tier removes the
+// cap. `null` = unlimited. Only meaningful once `hasFeature()` is already true.
+export const QUANTITY_LIMITS: Partial<Record<PlanFeature, Record<PlanTier, number | null>>> = {
+  customDistributionRules: { free: 0, level1: 2, full: null },
+}
+
+export const TIER_DISPLAY_NAME: Record<PlanTier, string> = {
+  free:   'Clariva Start Free',
+  level1: 'Clariva Growth',
+  full:   'Clariva Impact',
+}
+
+// NGN, whole-naira monthly/annual list prices. No payment processor is wired
+// up yet — these are display-only until Billing tab checkout exists.
+export const TIER_PRICING: Record<PlanTier, { monthly: number; annual: number }> = {
+  free:   { monthly: 0,     annual: 0 },
+  level1: { monthly: 10000, annual: 100000 },
+  full:   { monthly: 25000, annual: 250000 },
 }
 
 const TIER_RANK: Record<PlanTier, number> = { free: 0, level1: 1, full: 2 }
@@ -74,12 +95,20 @@ export function usePlan() {
     return tierAtLeast(tier, FEATURE_TIERS[feature])
   }
 
+  // Returns the org's current quantity ceiling for a capped feature — null
+  // means unlimited (either the feature has no cap defined, or this tier's
+  // limit is explicitly null).
+  const quantityLimit = (feature: PlanFeature): number | null => {
+    return QUANTITY_LIMITS[feature]?.[tier] ?? null
+  }
+
   return {
     tier,
     isFree:          (): boolean => resolved && tier === 'free',
     isLevel1OrAbove: (): boolean => !resolved || tierAtLeast(tier, 'level1'),
     isFull:          (): boolean => resolved && tier === 'full',
     hasFeature,
+    quantityLimit,
     importedRowsCount,
     importCapReached: (): boolean => resolved && tier === 'free' && importedRowsCount >= 100,
     importRowsRemaining: (): number => Math.max(0, 100 - importedRowsCount),

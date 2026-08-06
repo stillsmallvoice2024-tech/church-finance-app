@@ -170,7 +170,7 @@ export default function App() {
                 <Route path="change-log" element={<ErrorBoundary><ChangeLog /></ErrorBoundary>} />
               </Route>
             </Route>
-            <Route element={<FeatureGuard feature="specialConfigs" />}>
+            <Route element={<FeatureGuard feature="customDistributionRules" />}>
               <Route path="percentage-allocations" element={<ErrorBoundary><PercentageAllocations /></ErrorBoundary>} />
             </Route>
             {/* Funds — old fund-view routes redirect into its tabs */}

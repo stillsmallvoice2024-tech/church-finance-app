@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
+import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
 import type { AllocationConfig } from '../store/allocationStore'
 
 function orgPayload(): { org_id: string } {
@@ -108,6 +109,29 @@ export async function createGroupWithFirstVersion(params: {
   prev_income_type_id?: string | null
 }): Promise<{ groupId: string; config: AllocationConfig }> {
   const org = orgPayload()
+
+  // Authoritative cap check — the real enforcement point, since custom-rule
+  // creation has more than one UI entry point (Distribution Rules tab,
+  // SetupWizard's per-income-type flow). UI-level guards exist too for
+  // better UX, but this is what actually stops it.
+  const { planTier, planExpiresAt } = useOrgStore.getState()
+  const tier  = resolveEffectiveTier(planTier, planExpiresAt)
+  const limit = QUANTITY_LIMITS.customDistributionRules?.[tier] ?? null
+  if (limit !== null) {
+    const { count, error: countErr } = await supabase
+      .from('special_config_groups')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', org.org_id)
+      .eq('is_default', false)
+      .eq('is_archived', false)
+    if (countErr) throw new Error(countErr.message)
+    if ((count ?? 0) >= limit) {
+      throw new Error(
+        `Your plan allows up to ${limit} custom distribution rule${limit === 1 ? '' : 's'} — upgrade to add more.`,
+      )
+    }
+  }
+
   const { data: grp, error: gErr } = await supabase
     .from('special_config_groups')
     .insert({ name: params.name, ...org })
