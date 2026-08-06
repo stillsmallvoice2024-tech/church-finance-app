@@ -34,6 +34,11 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
   ocrImport:               'Scanned PDF import (OCR)',
 }
 
+// Short form used in button labels ("Move to Growth") — TIER_DISPLAY_NAME
+// carries the "Clariva" prefix, which reads well as a plan name but not
+// inline in a call-to-action.
+const TIER_SHORT_NAME: Record<PlanTier, string> = { free: 'Start', level1: 'Growth', full: 'Impact' }
+
 const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 
 function planChangeMailto(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): string {
@@ -246,14 +251,14 @@ export function BillingTab() {
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity"
                   >
                     <Mail className="w-3.5 h-3.5" />
-                    Upgrade
+                    Move to {TIER_SHORT_NAME[t]}
                   </a>
                 ) : (
                   <a
                     href={planChangeMailto(orgName, tier, t)}
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
-                    Downgrade
+                    Switch to {TIER_SHORT_NAME[t]}
                   </a>
                 )}
               </div>

@@ -44,7 +44,7 @@ const TAB_CARDS: { tab: Tab; Icon: React.FC<{ className?: string }>; label: stri
   { tab: 'Outflow Types',      Icon: TrendingDown, label: 'Outflow Types'      },
   { tab: 'Departments',        Icon: Users,        label: 'Departments'  },
   { tab: 'Currencies',         Icon: Globe,        label: 'Currencies'   },
-  { tab: 'Billing',            Icon: CreditCard,   label: 'Billing'      },
+  { tab: 'Billing',            Icon: CreditCard,   label: 'Plans & Pricing' },
 ]
 
 // URL slug per tab, so old deep links and redirects land on the right section.
