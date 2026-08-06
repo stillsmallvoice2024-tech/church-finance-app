@@ -36,6 +36,46 @@ async function fetchAllOrgMemberships(
   }
   const base = `${baseUrl}/rest/v1/org_members?user_id=eq.${encodeURIComponent(userId)}&status=eq.active`
 
+  // Row shape shared by attempt 1 (with imported_rows_period_start) and 1b
+  // (without it) — a single missing column must never take plan_tier down
+  // with it, since a stale/unmigrated org_id then reads as tier=null, which
+  // resolveEffectiveTier() fails OPEN to 'full' — silently disabling every
+  // gate in the app, not just whichever column was missing.
+  type PlanFieldsRow = {
+    org_id:        string
+    role:          UserRole
+    organizations: {
+      name:                string
+      onboarding_complete: boolean | null
+      default_currency:    string | null
+      timezone:            string | null
+      status:              OrgStatus | null
+      deleted_at:          string | null
+      purge_at:            string | null
+      metadata:            Record<string, unknown> | null
+      plan_tier:           PlanTier | null
+      plan_expires_at:     string | null
+      imported_rows_count: number | null
+      imported_rows_period_start?: string | null
+    } | null
+  }
+  const mapPlanFieldsRow = (row: PlanFieldsRow): OrgMembership => ({
+    org_id:              row.org_id,
+    org_name:            row.organizations?.name ?? 'My Organization',
+    role:                row.role,
+    onboarding_complete: row.organizations?.onboarding_complete ?? null,
+    default_currency:    row.organizations?.default_currency ?? null,
+    timezone:            row.organizations?.timezone ?? null,
+    org_status:          row.organizations?.status ?? 'active',
+    org_deleted_at:      row.organizations?.deleted_at ?? null,
+    org_purge_at:        row.organizations?.purge_at ?? null,
+    org_type:            (row.organizations?.metadata?.org_type as string | null) ?? null,
+    plan_tier:           row.organizations?.plan_tier ?? null,
+    plan_expires_at:     row.organizations?.plan_expires_at ?? null,
+    imported_rows_count: row.organizations?.imported_rows_count ?? 0,
+    imported_rows_period_start: row.organizations?.imported_rows_period_start ?? null,
+  })
+
   // Attempt 1: full columns including deletion-lifecycle + plan fields
   const res1 = await fetch(
     `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count,imported_rows_period_start)`,
@@ -43,40 +83,24 @@ async function fetchAllOrgMemberships(
   )
 
   if (res1.ok) {
-    const rows = await res1.json() as Array<{
-      org_id:        string
-      role:          UserRole
-      organizations: {
-        name:                string
-        onboarding_complete: boolean | null
-        default_currency:    string | null
-        timezone:            string | null
-        status:              OrgStatus | null
-        deleted_at:          string | null
-        purge_at:            string | null
-        metadata:            Record<string, unknown> | null
-        plan_tier:           PlanTier | null
-        plan_expires_at:     string | null
-        imported_rows_count: number | null
-        imported_rows_period_start: string | null
-      } | null
-    }>
-    return rows.map(row => ({
-      org_id:              row.org_id,
-      org_name:            row.organizations?.name ?? 'My Organization',
-      role:                row.role,
-      onboarding_complete: row.organizations?.onboarding_complete ?? null,
-      default_currency:    row.organizations?.default_currency ?? null,
-      timezone:            row.organizations?.timezone ?? null,
-      org_status:          row.organizations?.status ?? 'active',
-      org_deleted_at:      row.organizations?.deleted_at ?? null,
-      org_purge_at:        row.organizations?.purge_at ?? null,
-      org_type:            (row.organizations?.metadata?.org_type as string | null) ?? null,
-      plan_tier:           row.organizations?.plan_tier ?? null,
-      plan_expires_at:     row.organizations?.plan_expires_at ?? null,
-      imported_rows_count: row.organizations?.imported_rows_count ?? 0,
-      imported_rows_period_start: row.organizations?.imported_rows_period_start ?? null,
-    }))
+    const rows = await res1.json() as PlanFieldsRow[]
+    return rows.map(mapPlanFieldsRow)
+  }
+
+  // Attempt 1b: same as attempt 1 but without imported_rows_period_start —
+  // covers an org that has run the plan_tier migration but not yet the
+  // later import-cap-monthly one. Keeps plan_tier/plan_expires_at working
+  // (and every gate that depends on them) even when only the newest column
+  // is missing, instead of falling all the way to attempt 2 below.
+  if (res1.status === 400) {
+    const res1b = await fetch(
+      `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count)`,
+      { signal, headers },
+    )
+    if (res1b.ok) {
+      const rows = await res1b.json() as PlanFieldsRow[]
+      return rows.map(mapPlanFieldsRow)
+    }
   }
 
   // Attempt 2: without deletion columns (pre-20260602000001 DBs)

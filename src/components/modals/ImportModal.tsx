@@ -1481,30 +1481,27 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // ── Free-tier import cap (monthly) ────────────────────────────────────────
       // Cumulative across all imports this calendar month for this org (not
       // per-file) — otherwise a free user bypasses the cap by re-importing.
-      // Truncate rather than hard-block so the user can still see the feature
-      // work on their data. resolveEffectiveImportCount mirrors the DB's own
-      // month-rollover check, so a stale pre-rollover count read from the
-      // store still resolves to 0 here.
+      // Hard-fail the whole import rather than truncating it: nothing is
+      // inserted at all if this file would push the org over the monthly
+      // allowance, so there's no ambiguity about which rows made it in.
+      // resolveEffectiveImportCount mirrors the DB's own month-rollover
+      // check, so a stale pre-rollover count read from the store still
+      // resolves to 0 here.
       const { planTier, planExpiresAt, importedRowsCount, importedRowsPeriodStart } = useOrgStore.getState()
       const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
       const effectiveImportedRowsCount = resolveEffectiveImportCount(importedRowsCount, importedRowsPeriodStart)
-      let capTruncated = 0
       if (effectiveTier === 'free') {
         const remaining = Math.max(0, IMPORT_ROWS_PER_MONTH - effectiveImportedRowsCount)
         const wouldInsert = inflowToInsert.length + outflowToInsert.length
         if (wouldInsert > remaining) {
-          capTruncated = wouldInsert - remaining
-          // Fill the remaining allowance with inflow rows first, then outflow.
-          const keepInflow = Math.min(inflowToInsert.length, remaining)
-          const keepOutflow = Math.max(0, remaining - keepInflow)
-          inflowToInsert  = inflowToInsert.slice(0, keepInflow)
-          outflowToInsert = outflowToInsert.slice(0, keepOutflow)
-          skipped += capTruncated
           errors.push(
             remaining === 0
-              ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit — upgrade to import the rest of this statement.`
-              : `Free plan limit reached after ${remaining} more row(s) — the remaining ${capTruncated} row(s) were skipped. Upgrade to import your full statement.`,
+              ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — upgrade to Growth or wait for next month's reset.`
+              : `This statement has ${wouldInsert} row(s) to import but your free plan only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — upgrade to Growth for unlimited imports, or split the statement to fit.`,
           )
+          importCompletedRef.current = true
+          setResult({ imported: 0, skipped: wouldInsert, errors, fallbackIdCount: 0, collisions: [] })
+          return
         }
       }
 
@@ -1790,6 +1787,29 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         if (ref && existingFxRefs.has(ref)) { skipped++; return false }
         return true
       })
+
+      // Free-tier import cap (monthly) — same hard-fail-upfront rule as the
+      // bank-statement path above. FX isn't reachable by Free-tier orgs in
+      // the normal flow (fx feature itself requires Level 1+), but this
+      // covers the edge case of a Free org's single bank being flagged FX.
+      {
+        const { planTier, planExpiresAt, importedRowsCount, importedRowsPeriodStart } = useOrgStore.getState()
+        const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
+        const effectiveImportedRowsCount = resolveEffectiveImportCount(importedRowsCount, importedRowsPeriodStart)
+        if (effectiveTier === 'free') {
+          const remaining = Math.max(0, IMPORT_ROWS_PER_MONTH - effectiveImportedRowsCount)
+          if (newFxRows.length > remaining) {
+            errors.push(
+              remaining === 0
+                ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit. Nothing was imported — upgrade to Growth or wait for next month's reset.`
+                : `This statement has ${newFxRows.length} row(s) to import but your free plan only has ${remaining} left this month (${effectiveImportedRowsCount} of ${IMPORT_ROWS_PER_MONTH} used). Nothing was imported — upgrade to Growth for unlimited imports.`,
+            )
+            importCompletedRef.current = true
+            setResult({ imported: 0, skipped: newFxRows.length, errors, fallbackIdCount: 0, collisions: [] })
+            return
+          }
+        }
+      }
 
       const BATCH = 100
       for (let i = 0; i < newFxRows.length; i += BATCH) {
