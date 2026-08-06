@@ -67,9 +67,23 @@ create table public.organizations (
   plan_expires_at       timestamptz,
   imported_rows_count   int         not null default 0,
   imported_rows_period_start timestamptz not null default now(),
+  -- Stripe linkage (20260806000000_stripe_billing). Written only by the
+  -- billing edge functions under the service role — see Section 12.
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  plan_status           text        not null default 'active'
+                        check (plan_status in ('active', 'trialing', 'past_due', 'canceled')),
+  trial_ends_at         timestamptz,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
+
+create unique index if not exists organizations_stripe_customer_id_key
+  on public.organizations (stripe_customer_id)
+  where stripe_customer_id is not null;
+create unique index if not exists organizations_stripe_subscription_id_key
+  on public.organizations (stripe_subscription_id)
+  where stripe_subscription_id is not null;
 
 create index if not exists idx_organizations_slug       on public.organizations(slug);
 create index if not exists idx_organizations_created_by on public.organizations(created_by);
@@ -228,6 +242,12 @@ begin
   if not public.is_org_member(p_org_id) then
     raise exception 'not a member of this organization';
   end if;
+
+  -- SECURITY DEFINER doesn't change the JWT the request arrived with, so
+  -- guard_org_plan_columns() would see 'authenticated' and block the write
+  -- below. This is the one legitimate user-triggered change to a billing
+  -- column; the flag is transaction-local.
+  perform set_config('app.plan_guard_bypass', 'on', true);
 
   select imported_rows_period_start into v_period_start
   from public.organizations where id = p_org_id;
@@ -988,10 +1008,60 @@ alter table public.currencies                     enable row level security;
 alter table public.user_preferences               enable row level security;
 alter table public.org_deletion_backups           enable row level security;
 
+-- ── Plan predicates used by the policies in Section 9 ─────────────────────────
+-- Declared here rather than with the other helpers in Section 4 because they
+-- count rows in business tables that don't exist until Section 6.
+--
+-- These mirror QUANTITY_LIMITS and TXN_TYPE_FEATURE in src/hooks/usePlan.ts.
+-- The database is the enforcer; the TypeScript copies exist so a user sees an
+-- upsell card instead of a raw error. Change one, change the other.
+
+-- Mirrors QUANTITY_LIMITS.multiBank — Start caps at one bank.
+create or replace function public.org_can_add_bank(p_org_id uuid)
+returns boolean language sql stable security definer as $$
+  select public.org_plan_at_least(p_org_id, 'level1')
+      or (select count(*) from public.banks where org_id = p_org_id) < 1;
+$$;
+
+-- Mirrors QUANTITY_LIMITS.customDistributionRules — Start none, Growth two,
+-- Impact unlimited. A custom distribution rule is one special_config_groups row.
+create or replace function public.org_can_add_custom_rule(p_org_id uuid)
+returns boolean language sql stable security definer as $$
+  select case public.org_effective_plan_tier(p_org_id)
+    when 'full'   then true
+    when 'level1' then (select count(*) from public.special_config_groups where org_id = p_org_id) < 2
+    else               false
+  end;
+$$;
+
+-- Which tier a given inflow/outflow transaction_type requires — the four types
+-- the Adjustments and Bank Movement pages exist to manage, both Impact-tier
+-- features. Enforced by trg_inflow/outflow_txn_type_plan in Section 12.
+create or replace function public.org_plan_allows_txn_type(p_org_id uuid, p_txn_type text)
+returns boolean language sql stable as $$
+  select case p_txn_type
+    when 'refund'             then public.org_plan_at_least(p_org_id, 'full')
+    when 'reversal'           then public.org_plan_at_least(p_org_id, 'full')
+    when 'bank_deposit'       then public.org_plan_at_least(p_org_id, 'full')
+    when 'intrabank_transfer' then public.org_plan_at_least(p_org_id, 'full')
+    else true
+  end;
+$$;
+
 -- ================================================================
 -- 9. RLS POLICIES
 -- All helper functions exist (Section 4).
 -- All org_id columns exist (Section 6).
+--
+-- Subscription tiers are enforced HERE and in Section 12, not in the
+-- browser. The React gates in src/components/auth/PlanGates.tsx are
+-- presentation only — they exist so a user sees an upsell card instead
+-- of a database error. Deleting one from the DOM gets you nothing.
+--
+-- DESIGN RULE — plan enforcement is on CREATE, never on READ/EDIT/DELETE.
+-- A downgrade must never trap an org's data: they keep full read, edit
+-- and delete access to everything created on a higher tier, and simply
+-- cannot create more of it. Every plan check below is INSERT-only.
 -- ================================================================
 
 -- ── profiles (no org_id — global user registry) ───────────────────────────────
@@ -1100,7 +1170,10 @@ create policy "org_members_delete" on public.org_members
 create policy "scg_select" on public.special_config_groups
   for select using (public.is_org_member(org_id));
 create policy "scg_insert" on public.special_config_groups
-  for insert with check (public.is_org_admin(org_id));
+  for insert with check (
+    public.is_org_admin(org_id)
+    and public.org_can_add_custom_rule(org_id)
+  );
 create policy "scg_update" on public.special_config_groups
   for update using (public.is_org_admin(org_id));
 create policy "scg_delete" on public.special_config_groups
@@ -1294,7 +1367,10 @@ create policy "intraflow_delete" on public.intra_flows
 create policy "fx_select" on public.fx_transactions
   for select using (public.is_org_member(org_id));
 create policy "fx_insert" on public.fx_transactions
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "fx_update" on public.fx_transactions
   for update using (public.is_org_finance_user(org_id));
 create policy "fx_delete" on public.fx_transactions
@@ -1305,7 +1381,10 @@ create policy "fx_delete" on public.fx_transactions
 create policy "fxc_select" on public.fx_conversions
   for select using (public.is_org_member(org_id));
 create policy "fxc_insert" on public.fx_conversions
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "fxc_update" on public.fx_conversions
   for update using (public.is_org_finance_user(org_id));
 create policy "fxc_delete" on public.fx_conversions
@@ -1316,7 +1395,10 @@ create policy "fxc_delete" on public.fx_conversions
 create policy "bank_deposits_select" on public.bank_deposits
   for select using (public.is_org_member(org_id));
 create policy "bank_deposits_insert" on public.bank_deposits
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "bank_deposits_update" on public.bank_deposits
   for update using (public.is_org_finance_user(org_id));
 create policy "bank_deposits_delete" on public.bank_deposits
@@ -1327,7 +1409,10 @@ create policy "bank_deposits_delete" on public.bank_deposits
 create policy "intrabank_select" on public.intrabank_transfers
   for select using (public.is_org_member(org_id));
 create policy "intrabank_insert" on public.intrabank_transfers
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "intrabank_update" on public.intrabank_transfers
   for update using (public.is_org_finance_user(org_id));
 create policy "intrabank_delete" on public.intrabank_transfers
@@ -1338,7 +1423,10 @@ create policy "intrabank_delete" on public.intrabank_transfers
 create policy "receipts_select" on public.receipts
   for select using (public.is_org_member(org_id));
 create policy "receipts_insert" on public.receipts
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "receipts_delete" on public.receipts
   for delete using (public.is_org_finance_user(org_id));
 
@@ -1348,7 +1436,10 @@ create policy "receipts_delete" on public.receipts
 create policy "invitations_select" on public.invitations
   for select using (public.is_org_admin(org_id));
 create policy "invitations_insert" on public.invitations
-  for insert with check (public.is_org_admin(org_id));
+  for insert with check (
+    public.is_org_admin(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "invitations_update" on public.invitations
   for update using (public.is_org_admin(org_id));
 create policy "invitations_delete" on public.invitations
@@ -1430,7 +1521,10 @@ create policy "cob_delete" on public.category_opening_balances
 create policy "report_templates_select" on public.report_templates
   for select using (public.is_org_member(org_id));
 create policy "report_templates_insert" on public.report_templates
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "report_templates_update" on public.report_templates
   for update using (public.is_org_finance_user(org_id));
 create policy "report_templates_delete" on public.report_templates
@@ -1459,7 +1553,10 @@ create policy "rl_insert" on public.recalculation_logs
 create policy "dr_select" on public.dynamic_reports
   for select using (public.is_org_member(org_id));
 create policy "dr_insert" on public.dynamic_reports
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "dr_update" on public.dynamic_reports
   for update using (public.is_org_finance_user(org_id));
 create policy "dr_delete" on public.dynamic_reports
@@ -3184,7 +3281,10 @@ alter table public.bank_statement_balances enable row level security;
 create policy "bsb_select" on public.bank_statement_balances
   for select using (public.is_org_member(org_id));
 create policy "bsb_insert" on public.bank_statement_balances
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "bsb_update" on public.bank_statement_balances
   for update using (public.is_org_finance_user(org_id));
 create policy "bsb_delete" on public.bank_statement_balances
@@ -3192,7 +3292,191 @@ create policy "bsb_delete" on public.bank_statement_balances
 create index if not exists idx_bsb_org_bank on public.bank_statement_balances(org_id, bank_name);
 
 -- ================================================================
--- 12. SCHEMA RELOAD
+-- 12. PLAN ENFORCEMENT — triggers
+-- ================================================================
+-- The per-table INSERT policies carrying the plan predicates live inline
+-- with their tables in Section 9. This section holds the three checks
+-- that RLS can't express, all of which need triggers.
+--
+-- DESIGN RULE, restated because these two triggers are where it bites:
+-- enforcement is on CREATE, never on EDIT. A downgraded org keeps full
+-- read, edit and delete access to everything it created on a higher
+-- tier. Both triggers below therefore fire only when a gated value is
+-- actually being introduced, not when an existing row is touched.
+
+-- ── Plan / billing column lock ────────────────────────────────────────────────
+-- orgs_update is `using (is_org_admin(id))` with no WITH CHECK, which in
+-- Postgres means the USING expression doubles as the check — an admin can
+-- write any column on their own org row. Column privileges can't express
+-- "everything except these nine", so the guard is a trigger. Only the
+-- service role (Stripe webhook, checkout/portal edge functions) and
+-- sessions with no PostgREST JWT (migrations, psql) may pass.
+
+create or replace function public.plan_guard_is_privileged()
+returns boolean language plpgsql stable as $$
+declare
+  v_role text;
+begin
+  if coalesce(current_setting('app.plan_guard_bypass', true), '') = 'on' then
+    return true;
+  end if;
+
+  begin
+    v_role := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '');
+  exception when others then
+    v_role := '';
+  end;
+
+  -- '' = no PostgREST request context (a migration or direct psql session).
+  return v_role in ('', 'service_role');
+end;
+$$;
+
+create or replace function public.guard_org_plan_columns()
+returns trigger language plpgsql as $$
+declare
+  -- Compared via to_jsonb rather than `new.plan_status is distinct from
+  -- old.plan_status` and friends, so that a database which hasn't applied
+  -- every billing migration yet still works: a direct field reference to a
+  -- column that doesn't exist raises "record new has no field ..." and would
+  -- take down EVERY organizations UPDATE, not just a plan change.
+  v_guarded constant text[] := array[
+    'plan_tier', 'plan_started_at', 'plan_expires_at', 'plan_status',
+    'trial_ends_at', 'stripe_customer_id', 'stripe_subscription_id',
+    'imported_rows_count', 'imported_rows_period_start'
+  ];
+  v_old jsonb;
+  v_new jsonb;
+  v_col text;
+begin
+  if public.plan_guard_is_privileged() then
+    return new;
+  end if;
+
+  v_old := to_jsonb(old);
+  v_new := to_jsonb(new);
+
+  foreach v_col in array v_guarded loop
+    if v_new ? v_col and (v_old -> v_col) is distinct from (v_new -> v_col) then
+      raise exception
+        'Plan and billing fields are managed by billing and cannot be changed directly (%)', v_col
+        using errcode = '42501';
+    end if;
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_org_plan_columns on public.organizations;
+create trigger trg_guard_org_plan_columns
+  before update on public.organizations
+  for each row execute function public.guard_org_plan_columns();
+
+-- ── transaction_type gate ─────────────────────────────────────────────────────
+-- A trigger rather than an RLS WITH CHECK, specifically so a downgrade
+-- doesn't trap data: WITH CHECK on UPDATE cannot see OLD, so it would
+-- re-evaluate the row's existing transaction_type and block a Start-tier org
+-- from editing a refund it created while on Impact.
+create or replace function public.enforce_txn_type_plan()
+returns trigger language plpgsql as $$
+begin
+  -- Nested rather than ANDed with tg_op: PL/pgSQL does not guarantee
+  -- short-circuit evaluation, and OLD is unassigned during INSERT, so a
+  -- single `tg_op = 'UPDATE' and old.x ...` can raise "record old is not
+  -- assigned yet" on every insert.
+  if tg_op = 'UPDATE' then
+    if new.transaction_type is not distinct from old.transaction_type then
+      return new;
+    end if;
+  end if;
+
+  if not public.org_plan_allows_txn_type(new.org_id, new.transaction_type) then
+    raise exception '% transactions require the Clariva Impact plan', new.transaction_type
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_inflow_txn_type_plan on public.inflow_transactions;
+create trigger trg_inflow_txn_type_plan
+  before insert or update on public.inflow_transactions
+  for each row execute function public.enforce_txn_type_plan();
+
+drop trigger if exists trg_outflow_txn_type_plan on public.outflow_transactions;
+create trigger trg_outflow_txn_type_plan
+  before insert or update on public.outflow_transactions
+  for each row execute function public.enforce_txn_type_plan();
+
+-- ── Bank quantity + foreign-currency caps ─────────────────────────────────────
+-- Also a trigger: both caps need a count of sibling rows, and the currency
+-- cap must distinguish "switching an existing FX bank's currency" from
+-- "adding a second currency".
+create or replace function public.enforce_bank_plan_limits()
+returns trigger language plpgsql as $$
+declare
+  v_tier          text := public.org_effective_plan_tier(new.org_id);
+  v_other_fx      int;
+  v_currency_seen bool;
+begin
+  if tg_op = 'INSERT' and not public.org_can_add_bank(new.org_id) then
+    raise exception 'The Clariva Start plan is limited to one bank account'
+      using errcode = '42501';
+  end if;
+
+  -- Nothing further to check unless this row is (or is becoming) foreign
+  -- currency. Editing an existing FX bank's other fields is always allowed.
+  if not coalesce(new.is_foreign_currency, false) then
+    return new;
+  end if;
+
+  -- Nested rather than ANDed with tg_op — see enforce_txn_type_plan().
+  if tg_op = 'UPDATE' then
+    if coalesce(old.is_foreign_currency, false)
+       and new.currency is not distinct from old.currency then
+      return new;
+    end if;
+  end if;
+
+  if v_tier = 'free' then
+    raise exception 'Foreign-currency accounts require the Clariva Growth plan'
+      using errcode = '42501';
+  end if;
+
+  if v_tier = 'level1' then
+    -- Growth may run any number of FX banks, but all in the same one foreign
+    -- currency. Impact removes the currency-count cap.
+    select count(distinct currency),
+           bool_or(currency = new.currency)
+      into v_other_fx, v_currency_seen
+    from public.banks
+    where org_id = new.org_id
+      and is_foreign_currency
+      and id <> new.id;
+
+    if coalesce(v_other_fx, 0) >= 1 and not coalesce(v_currency_seen, false) then
+      raise exception 'A second foreign currency requires the Clariva Impact plan'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_bank_plan_limits on public.banks;
+create trigger trg_bank_plan_limits
+  before insert or update on public.banks
+  for each row execute function public.enforce_bank_plan_limits();
+
+grant execute on function public.org_plan_allows_txn_type(uuid, text) to authenticated;
+grant execute on function public.org_can_add_bank(uuid)              to authenticated;
+grant execute on function public.org_can_add_custom_rule(uuid)       to authenticated;
+
+-- ================================================================
+-- 13. SCHEMA RELOAD
 -- ================================================================
 
 notify pgrst, 'reload schema';

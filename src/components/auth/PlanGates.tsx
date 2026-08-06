@@ -29,21 +29,39 @@ export function UpsellCard({ requiredTier, locked }: { requiredTier: PlanTier; l
   )
 }
 
+/**
+ * Shown while the org's tier is still unknown. The gates below fail closed,
+ * so without this a paying org would see an upsell card for the moment
+ * between page load and the membership fetch landing. Neutral on purpose:
+ * it promises neither the feature nor the upsell.
+ */
+function GatePlaceholder() {
+  return (
+    <div
+      aria-hidden
+      className="animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800/60 h-32 w-full"
+    />
+  )
+}
+
 /** Renders children when the org's plan is Level 1 or above. */
 export function RequiresLevel1({ children, fallback }: GateProps) {
-  const { isLevel1OrAbove } = usePlan()
+  const { isLevel1OrAbove, planLoading } = usePlan()
+  if (planLoading) return <GatePlaceholder />
   return isLevel1OrAbove() ? <>{children}</> : <>{fallback ?? <UpsellCard requiredTier="level1" />}</>
 }
 
 /** Renders children when the org's plan is Full. */
 export function RequiresFull({ children, fallback }: GateProps) {
-  const { isFull } = usePlan()
+  const { isFull, planLoading } = usePlan()
+  if (planLoading) return <GatePlaceholder />
   return isFull() ? <>{children}</> : <>{fallback ?? <UpsellCard requiredTier="full" />}</>
 }
 
 /** Renders children when the org's plan unlocks the given feature. */
 export function PlanGate({ feature, children, fallback }: GateProps & { feature: PlanFeature }) {
-  const { hasFeature } = usePlan()
+  const { hasFeature, planLoading } = usePlan()
+  if (planLoading) return <GatePlaceholder />
   return hasFeature(feature)
     ? <>{children}</>
     : <>{fallback ?? <UpsellCard requiredTier={FEATURE_TIERS[feature]} locked={feature} />}</>
