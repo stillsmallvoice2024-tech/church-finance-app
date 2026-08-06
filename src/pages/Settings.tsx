@@ -3,6 +3,8 @@ import { User, Lock, Info, Palette, CheckCircle2, XCircle, Loader2, Sun, Moon, E
 import { supabase } from '../lib/supabase'
 import { useAuth }  from '../hooks/useAuth'
 import { useRole }  from '../hooks/useRole'
+import { usePlan }  from '../hooks/usePlan'
+import { Link }     from 'react-router-dom'
 import { MFAEnrollModal } from '../components/modals/MFAEnrollModal'
 import { useToastStore } from '../store/toastStore'
 import { useThemeStore } from '../store/themeStore'
@@ -44,6 +46,8 @@ function Section({ icon: Icon, title, iconColor, children }: {
 export default function Settings() {
   const { user, profile } = useAuth()
   const { role }          = useRole()
+  const { hasFeature }    = usePlan()
+  const canBackupRestore  = hasFeature('backupRestore')
   const { push: toast }   = useToastStore()
   const { status: dbStatus, latency, recheck } = useDbStatus()
 
@@ -422,13 +426,24 @@ export default function Settings() {
           <p className="text-sm text-gray-500">
             Back up your entire account, restore from a previous backup, or download your data as CSV spreadsheets.
           </p>
+          {!canBackupRestore && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 -mt-2">
+              Backup &amp; Restore require the Impact plan.{' '}
+              <Link to="/settings?tab=billing&locked=backupRestore" className="underline font-medium">Move to Impact</Link>
+            </p>
+          )}
           <div className="space-y-2">
             <button
-              onClick={() => setBackupOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              onClick={() => canBackupRestore ? setBackupOpen(true) : undefined}
+              disabled={!canBackupRestore}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border transition-colors ${
+                canBackupRestore
+                  ? 'border-gray-200 hover:border-primary/40 hover:bg-primary/5'
+                  : 'border-gray-100 opacity-50 cursor-not-allowed'
+              }`}
             >
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Download className="w-4 h-4 text-primary" />
+                {canBackupRestore ? <Download className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-primary" />}
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">Backup Account</p>
@@ -441,11 +456,16 @@ export default function Settings() {
             </button>
 
             <button
-              onClick={() => setRestoreOpen(true)}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border border-gray-200 hover:border-primary/40 hover:bg-primary/5 transition-colors"
+              onClick={() => canBackupRestore ? setRestoreOpen(true) : undefined}
+              disabled={!canBackupRestore}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left rounded-xl border transition-colors ${
+                canBackupRestore
+                  ? 'border-gray-200 hover:border-primary/40 hover:bg-primary/5'
+                  : 'border-gray-100 opacity-50 cursor-not-allowed'
+              }`}
             >
               <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <UploadCloud className="w-4 h-4 text-primary" />
+                {canBackupRestore ? <UploadCloud className="w-4 h-4 text-primary" /> : <Lock className="w-4 h-4 text-primary" />}
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-900">Restore Backup</p>

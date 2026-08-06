@@ -12,7 +12,7 @@ import { CreateSpecialConfigModal } from './CreateSpecialConfigModal'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore } from '../../store/authStore'
 import { useOrgStore } from '../../store/orgStore'
-import { resolveEffectiveTier } from '../../hooks/usePlan'
+import { resolveEffectiveTier, resolveEffectiveImportCount, IMPORT_ROWS_PER_MONTH } from '../../hooks/usePlan'
 import { useAllocationStore, buildVersionIndex } from '../../store/allocationStore'
 import { useCategories } from '../../hooks/useCategories'
 import { useBanks } from '../../hooks/useBanks'
@@ -1478,16 +1478,19 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
 
-      // ── Free-tier import cap ────────────────────────────────────────────────
-      // Cumulative across all imports for this org (not per-file) — otherwise
-      // a free user bypasses the cap by re-importing. Truncate rather than
-      // hard-block so the user can still see the feature work on their data.
-      const IMPORT_CAP = 100
-      const { planTier, planExpiresAt, importedRowsCount } = useOrgStore.getState()
+      // ── Free-tier import cap (monthly) ────────────────────────────────────────
+      // Cumulative across all imports this calendar month for this org (not
+      // per-file) — otherwise a free user bypasses the cap by re-importing.
+      // Truncate rather than hard-block so the user can still see the feature
+      // work on their data. resolveEffectiveImportCount mirrors the DB's own
+      // month-rollover check, so a stale pre-rollover count read from the
+      // store still resolves to 0 here.
+      const { planTier, planExpiresAt, importedRowsCount, importedRowsPeriodStart } = useOrgStore.getState()
       const effectiveTier = resolveEffectiveTier(planTier, planExpiresAt)
+      const effectiveImportedRowsCount = resolveEffectiveImportCount(importedRowsCount, importedRowsPeriodStart)
       let capTruncated = 0
       if (effectiveTier === 'free') {
-        const remaining = Math.max(0, IMPORT_CAP - importedRowsCount)
+        const remaining = Math.max(0, IMPORT_ROWS_PER_MONTH - effectiveImportedRowsCount)
         const wouldInsert = inflowToInsert.length + outflowToInsert.length
         if (wouldInsert > remaining) {
           capTruncated = wouldInsert - remaining
@@ -1499,7 +1502,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           skipped += capTruncated
           errors.push(
             remaining === 0
-              ? `You've reached the free plan's 100-transaction import limit — upgrade to import the rest of this statement.`
+              ? `You've reached the free plan's ${IMPORT_ROWS_PER_MONTH}-transaction monthly import limit — upgrade to import the rest of this statement.`
               : `Free plan limit reached after ${remaining} more row(s) — the remaining ${capTruncated} row(s) were skipped. Upgrade to import your full statement.`,
           )
         }
@@ -1610,7 +1613,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           p_count:  imported,
         })
         if (!countErr && typeof newCount === 'number') {
-          useOrgStore.getState().setImportedRowsCount(newCount)
+          // The RPC may have just reset the counter server-side (month
+          // rollover) — bump the locally-tracked period start to "now" too,
+          // it's always safe since resolveEffectiveImportCount only compares
+          // by calendar month, not exact timestamp.
+          useOrgStore.getState().setImportedRowsCount(newCount, new Date().toISOString())
         }
       }
 

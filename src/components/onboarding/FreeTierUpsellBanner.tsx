@@ -32,11 +32,12 @@ export function FreeTierUpsellBanner() {
 
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-snug">
-          You're on the Free plan
+          You're on Clariva Start
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-relaxed">
-          Unlock multi-bank tracking, foreign currency, reports, receipts and team invites on Level 1 —
-          or go Full for special allocation configs, reconciliation and audit trail.
+          Unlock multi-bank tracking, foreign currency, reports, receipts, reconciliation and team invites on
+          Growth — or go Impact for unlimited custom distribution rules, bulk reallocation, bank movement
+          tracking, backups and audit trail.
         </p>
         <div className="flex items-center flex-wrap gap-2 mt-2">
           <Link

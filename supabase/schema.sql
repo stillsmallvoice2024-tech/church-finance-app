@@ -66,6 +66,7 @@ create table public.organizations (
   plan_started_at       timestamptz not null default now(),
   plan_expires_at       timestamptz,
   imported_rows_count   int         not null default 0,
+  imported_rows_period_start timestamptz not null default now(),
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
@@ -215,20 +216,34 @@ returns boolean language sql security definer stable as $$
 $$;
 
 -- increment_import_count: atomically bumps organizations.imported_rows_count
--- so the free-tier 100-row Import cap can't be raced by concurrent imports.
+-- so the free-tier 100-row/month Import cap can't be raced by concurrent
+-- imports. Rolls the counter over (reset, not add) when the calendar month
+-- has changed since imported_rows_period_start — lazy, no cron needed.
 create or replace function public.increment_import_count(p_org_id uuid, p_count int)
 returns int language plpgsql security definer as $$
 declare
-  v_new_count int;
+  v_new_count    int;
+  v_period_start timestamptz;
 begin
   if not public.is_org_member(p_org_id) then
     raise exception 'not a member of this organization';
   end if;
 
-  update public.organizations
-  set imported_rows_count = imported_rows_count + greatest(p_count, 0)
-  where id = p_org_id
-  returning imported_rows_count into v_new_count;
+  select imported_rows_period_start into v_period_start
+  from public.organizations where id = p_org_id;
+
+  if date_trunc('month', now()) <> date_trunc('month', v_period_start) then
+    update public.organizations
+    set imported_rows_count        = greatest(p_count, 0),
+        imported_rows_period_start = now()
+    where id = p_org_id
+    returning imported_rows_count into v_new_count;
+  else
+    update public.organizations
+    set imported_rows_count = imported_rows_count + greatest(p_count, 0)
+    where id = p_org_id
+    returning imported_rows_count into v_new_count;
+  end if;
 
   return v_new_count;
 end;

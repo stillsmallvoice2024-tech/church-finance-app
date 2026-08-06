@@ -7,10 +7,11 @@ import {
   Layers, Percent, PieChart,
   BarChart3,
   Settings, Users, ClipboardList,
-  MoreHorizontal, X,
+  MoreHorizontal, X, Lock,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
+import { usePlan, TIER_SHORT_NAME, FEATURE_TIERS, type PlanFeature } from '../../hooks/usePlan'
 
 interface PrimaryTab {
   label: string
@@ -32,6 +33,8 @@ interface DrawerItem {
   icon: React.ElementType
   adminOnly?: boolean
   canWriteOnly?: boolean
+  /** Route is entirely gated behind this plan feature — greyed out + tier chip when locked. */
+  planFeature?: PlanFeature
 }
 
 interface DrawerSection {
@@ -45,35 +48,35 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     items: [
       { label: 'Import',            path: '/import',          icon: FileUp,    canWriteOnly: true },
       { label: 'Fund-to-Fund Transfer', path: '/intra-flow',     icon: Repeat2       },
-      { label: 'Receipts',          path: '/receipts',         icon: Receipt        },
+      { label: 'Receipts',          path: '/receipts',         icon: Receipt,        planFeature: 'receipts' },
     ],
   },
   {
     label: 'Banking',
     items: [
-      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
-      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
+      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon, planFeature: 'bankMovement' },
+      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe,          planFeature: 'fx' },
     ],
   },
   {
     label: 'Review & Processing',
     items: [
-      { label: 'Adjustments',    path: '/adjustments',    icon: RotateCcw     },
-      { label: 'Reconciliation', path: '/reconciliation', icon: ClipboardList },
+      { label: 'Adjustments',    path: '/adjustments',    icon: RotateCcw,    planFeature: 'adjustments' },
+      { label: 'Reconciliation', path: '/reconciliation', icon: ClipboardList, planFeature: 'reconciliation' },
     ],
   },
   {
     label: 'Fund Management',
     items: [
       { label: 'Fund Setup',         path: '/categories',             icon: Layers   },
-      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent  },
+      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent, planFeature: 'customDistributionRules' },
       { label: 'Funds',              path: '/funds',                  icon: PieChart },
     ],
   },
   {
     label: 'Reports',
     items: [
-      { label: 'Reports', path: '/reports', icon: BarChart3 },
+      { label: 'Reports', path: '/reports', icon: BarChart3, planFeature: 'reports' },
     ],
   },
   {
@@ -81,7 +84,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
     items: [
       { label: 'Settings',         path: '/settings',    icon: Settings          },
       { label: 'Users',            path: '/users',       icon: Users,         adminOnly: true },
-      { label: 'Activity History', path: '/change-log',  icon: ClipboardList, adminOnly: true },
+      { label: 'Activity History', path: '/change-log',  icon: ClipboardList, adminOnly: true, planFeature: 'changeLog' },
     ],
   },
 ]
@@ -89,6 +92,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
 export function BottomTabBar() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { isAdmin, canWrite } = useRole()
+  const { hasFeature } = usePlan()
   const admin = isAdmin()
   const write = canWrite()
   const primaryTabs = BASE_PRIMARY_TABS
@@ -134,23 +138,33 @@ export function BottomTabBar() {
                     {section.label}
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {visibleItems.map(({ label, path, icon: Icon }) => (
-                      <NavLink
-                        key={path}
-                        to={path}
-                        onClick={() => setMoreOpen(false)}
-                        className={({ isActive }) =>
-                          `flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm font-medium transition-colors border-l-2 min-h-[48px] ${
-                            isActive
-                              ? 'bg-primary/[0.08] text-primary border-primary dark:bg-primary/20'
-                              : 'text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border-transparent'
-                          }`
-                        }
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span className="leading-tight">{label}</span>
-                      </NavLink>
-                    ))}
+                    {visibleItems.map(({ label, path, icon: Icon, planFeature }) => {
+                      const locked = planFeature ? !hasFeature(planFeature) : false
+                      return (
+                        <NavLink
+                          key={path}
+                          to={path}
+                          onClick={() => setMoreOpen(false)}
+                          className={({ isActive }) =>
+                            `flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm font-medium transition-colors border-l-2 min-h-[48px] ${
+                              locked
+                                ? 'text-gray-400 dark:text-gray-500 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] border-transparent'
+                                : isActive
+                                  ? 'bg-primary/[0.08] text-primary border-primary dark:bg-primary/20'
+                                  : 'text-gray-600 dark:text-gray-300 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border-transparent'
+                            }`
+                          }
+                        >
+                          {locked ? <Lock className="w-4 h-4 shrink-0" /> : <Icon className="w-4 h-4 shrink-0" />}
+                          <span className="leading-tight truncate min-w-0 flex-1">{label}</span>
+                          {locked && planFeature && (
+                            <span className="shrink-0 text-[8px] font-bold uppercase tracking-wide bg-black/5 dark:bg-white/10 text-gray-400 px-1 py-0.5 rounded-full">
+                              {TIER_SHORT_NAME[FEATURE_TIERS[planFeature]]}
+                            </span>
+                          )}
+                        </NavLink>
+                      )
+                    })}
                   </div>
                 </div>
               )

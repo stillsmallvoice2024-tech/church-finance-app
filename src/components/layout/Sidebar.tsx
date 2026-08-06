@@ -7,10 +7,11 @@ import {
   Layers, Percent, PieChart,
   BarChart3,
   Settings, Users, ClipboardList,
-  ChevronDown, X, HelpCircle,
+  ChevronDown, X, HelpCircle, Lock,
 } from 'lucide-react'
 import { BankMovementIcon } from '../ui/CompositeIcons'
 import { useRole } from '../../hooks/useRole'
+import { usePlan, TIER_SHORT_NAME, FEATURE_TIERS, type PlanFeature } from '../../hooks/usePlan'
 import { useOrgStore } from '../../store/orgStore'
 import { useAccountingYearStore } from '../../store/accountingYearStore'
 import { ROLE_LABELS } from '../../utils/constants'
@@ -23,6 +24,8 @@ interface NavItem {
   icon: React.ElementType
   adminOnly?: boolean
   canWriteOnly?: boolean
+  /** Route is entirely gated behind this plan feature — greyed out + tier chip when locked. */
+  planFeature?: PlanFeature
 }
 
 interface NavGroupDef {
@@ -43,7 +46,7 @@ const NAV_GROUPS: NavGroupDef[] = [
       { label: 'Outflows',          path: '/outflows',   icon: TrendingDown    },
       { label: 'Import',            path: '/import',         icon: FileUp,     canWriteOnly: true },
       { label: 'Fund-to-Fund Transfer', path: '/intra-flow', icon: Repeat2 },
-      { label: 'Receipts',          path: '/receipts',   icon: Receipt         },
+      { label: 'Receipts',          path: '/receipts',   icon: Receipt,        planFeature: 'receipts' },
     ],
   },
   {
@@ -52,8 +55,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     defaultOpen: false,
     items: [
       { label: 'Bank Ledger',          path: '/bank-ledger',      icon: BookOpen       },
-      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon },
-      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe          },
+      { label: 'Bank Deposits & Transfers', path: '/bank-movement',    icon: BankMovementIcon, planFeature: 'bankMovement' },
+      { label: 'Foreign Currency',     path: '/foreign-currency', icon: Globe,          planFeature: 'fx' },
     ],
   },
   {
@@ -61,8 +64,8 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Review & Processing',
     defaultOpen: false,
     items: [
-      { label: 'Adjustments',    path: '/adjustments',    icon: RotateCcw   },
-      { label: 'Reconciliation', path: '/reconciliation', icon: ShieldCheck },
+      { label: 'Adjustments',    path: '/adjustments',    icon: RotateCcw,   planFeature: 'adjustments' },
+      { label: 'Reconciliation', path: '/reconciliation', icon: ShieldCheck, planFeature: 'reconciliation' },
     ],
   },
   {
@@ -71,7 +74,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     defaultOpen: false,
     items: [
       { label: 'Fund Setup',         path: '/categories',             icon: Layers   },
-      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent  },
+      { label: 'Distribution Rules', path: '/percentage-allocations', icon: Percent, planFeature: 'customDistributionRules' },
       { label: 'Funds',              path: '/funds',                  icon: PieChart },
     ],
   },
@@ -80,7 +83,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     label: 'Reports',
     defaultOpen: false,
     items: [
-      { label: 'Reports', path: '/reports', icon: BarChart3 },
+      { label: 'Reports', path: '/reports', icon: BarChart3, planFeature: 'reports' },
     ],
   },
   {
@@ -90,7 +93,7 @@ const NAV_GROUPS: NavGroupDef[] = [
     items: [
       { label: 'Settings',          path: '/settings',    icon: Settings          },
       { label: 'User Management',   path: '/users',       icon: Users,         adminOnly: true },
-      { label: 'Activity History',  path: '/change-log',  icon: ClipboardList, adminOnly: true },
+      { label: 'Activity History',  path: '/change-log',  icon: ClipboardList, adminOnly: true, planFeature: 'changeLog' },
     ],
   },
 ]
@@ -134,6 +137,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin, canWrite } = useRole()
+  const { hasFeature } = usePlan()
   const showAdmin = isAdmin()
   const showWrite = canWrite()
   const activeYear = useAccountingYearStore(s => s.year)
@@ -230,24 +234,34 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   }`}
                 >
                   <div className="space-y-0.5 pb-1">
-                    {visibleItems.map(({ label, path, icon: Icon }) => (
-                      <NavLink
-                        key={path}
-                        to={path}
-                        end={path === '/'}
-                        onClick={onClose}
-                        className={({ isActive }) =>
-                          `flex items-center gap-3 pl-[10px] pr-3 py-3 rounded-lg text-sm font-medium transition-colors border-l-2 ${
-                            isActive
-                              ? 'bg-white/10 text-white border-primary/80'
-                              : 'text-white/60 hover:bg-white/[0.07] hover:text-white/90 border-transparent'
-                          }`
-                        }
-                      >
-                        <Icon className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{label}</span>
-                      </NavLink>
-                    ))}
+                    {visibleItems.map(({ label, path, icon: Icon, planFeature }) => {
+                      const locked = planFeature ? !hasFeature(planFeature) : false
+                      return (
+                        <NavLink
+                          key={path}
+                          to={path}
+                          end={path === '/'}
+                          onClick={onClose}
+                          className={({ isActive }) =>
+                            `flex items-center gap-3 pl-[10px] pr-3 py-3 rounded-lg text-sm font-medium transition-colors border-l-2 ${
+                              locked
+                                ? 'text-white/30 hover:bg-white/[0.04] hover:text-white/45 border-transparent'
+                                : isActive
+                                  ? 'bg-white/10 text-white border-primary/80'
+                                  : 'text-white/60 hover:bg-white/[0.07] hover:text-white/90 border-transparent'
+                            }`
+                          }
+                        >
+                          {locked ? <Lock className="w-4 h-4 shrink-0" /> : <Icon className="w-4 h-4 shrink-0" />}
+                          <span className="truncate flex-1">{label}</span>
+                          {locked && planFeature && (
+                            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide bg-white/10 text-white/50 px-1.5 py-0.5 rounded-full">
+                              {TIER_SHORT_NAME[FEATURE_TIERS[planFeature]]}
+                            </span>
+                          )}
+                        </NavLink>
+                      )
+                    })}
                   </div>
                 </div>
               </div>

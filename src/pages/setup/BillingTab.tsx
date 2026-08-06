@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card'
 import { useOrgStore } from '../../store/orgStore'
 import { useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import {
-  usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_PRICING, QUANTITY_LIMITS, TIER_RANK,
+  usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_SHORT_NAME, TIER_PRICING, QUANTITY_LIMITS, TIER_RANK,
   type PlanFeature,
 } from '../../hooks/usePlan'
 import type { PlanTier } from '../../types'
@@ -34,11 +34,6 @@ const FEATURE_LABEL: Record<PlanFeature, string> = {
   ocrImport:               'Scanned PDF import (OCR)',
 }
 
-// Short form used in button labels ("Move to Growth") — TIER_DISPLAY_NAME
-// carries the "Clariva" prefix, which reads well as a plan name but not
-// inline in a call-to-action.
-const TIER_SHORT_NAME: Record<PlanTier, string> = { free: 'Start', level1: 'Growth', full: 'Impact' }
-
 const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 
 function planChangeMailto(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): string {
@@ -66,7 +61,8 @@ export function BillingTab() {
 
   const orgName       = useOrgStore(s => s.orgName)
   const planExpiresAt = useOrgStore(s => s.planExpiresAt)
-  const { tier, importedRowsCount, importRowsRemaining } = usePlan()
+  const { tier, importedRowsCount, importRowsRemaining, importResetDate } = usePlan()
+  const resetDateLabel = formatDate(importResetDate())
   const { groups: customRuleGroups } = useSpecialConfigGroups()
   const customRuleCap = QUANTITY_LIMITS.customDistributionRules?.level1 ?? 2
 
@@ -77,8 +73,8 @@ export function BillingTab() {
       {
         label: 'Bank statement import',
         sub: tier === 'free'
-          ? `${importedRowsCount} of 100 transactions used`
-          : 'Up to 100 transactions, from Excel, CSV or PDF',
+          ? `${importedRowsCount} of 100 used this month · resets ${resetDateLabel}`
+          : 'Up to 100 transactions/month, from Excel, CSV or PDF',
       },
       { label: 'General distribution rule', sub: 'One default percentage split for every inflow' },
       { label: 'Funds & Bank Ledger' },
@@ -87,7 +83,7 @@ export function BillingTab() {
     level1: [
       { label: 'Unlimited bank accounts' },
       { label: 'Foreign currency & FX tracking' },
-      { label: 'Unlimited statement import', sub: 'No 100-row cap' },
+      { label: 'Unlimited statement import', sub: 'No monthly row cap' },
       { label: 'Report Centre' },
       { label: 'Receipt attachments' },
       { label: 'Reconciliation Centre' },
@@ -269,7 +265,7 @@ export function BillingTab() {
 
       {tier === 'free' && importRowsRemaining() === 0 && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          You've used your free import allowance — upgrade to keep importing.
+          You've used this month's free import allowance — it resets {resetDateLabel}, or upgrade to keep importing now.
         </p>
       )}
     </div>

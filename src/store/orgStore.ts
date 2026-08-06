@@ -15,6 +15,7 @@ export interface OrgMembership {
   plan_tier?:           PlanTier | null
   plan_expires_at?:     string | null
   imported_rows_count?: number | null
+  imported_rows_period_start?: string | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -33,6 +34,7 @@ interface OrgState {
   planTier:            PlanTier | null
   planExpiresAt:       string | null
   importedRowsCount:   number
+  importedRowsPeriodStart: string | null
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -42,7 +44,7 @@ interface OrgState {
   setOrgStatus:         (status: OrgStatus, deletedAt?: string | null, purgeAt?: string | null) => void
   setTimezone:          (tz: string | null) => void
   setOrgType:           (type: string | null) => void
-  setImportedRowsCount: (count: number) => void
+  setImportedRowsCount: (count: number, periodStart?: string | null) => void
   setPlanTier:          (tier: PlanTier, expiresAt?: string | null) => void
   setSwitching:         (v: boolean) => void
   clearOrg:             () => void
@@ -64,6 +66,7 @@ export const useOrgStore = create<OrgState>((set) => ({
   planTier:           null,
   planExpiresAt:      null,
   importedRowsCount:  0,
+  importedRowsPeriodStart: null,
   memberships:        [],
   switching:          false,
 
@@ -84,6 +87,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     planTier:           m.plan_tier !== undefined ? (m.plan_tier ?? null) : null,
     planExpiresAt:      m.plan_expires_at !== undefined ? (m.plan_expires_at ?? null) : null,
     importedRowsCount:  m.imported_rows_count ?? 0,
+    importedRowsPeriodStart: m.imported_rows_period_start ?? null,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -97,7 +101,9 @@ export const useOrgStore = create<OrgState>((set) => ({
 
   setOrgType: (type) => set({ orgType: type }),
 
-  setImportedRowsCount: (count) => set({ importedRowsCount: count }),
+  setImportedRowsCount: (count, periodStart) => set(periodStart !== undefined
+    ? { importedRowsCount: count, importedRowsPeriodStart: periodStart }
+    : { importedRowsCount: count }),
 
   setPlanTier: (tier, expiresAt = null) => set({ planTier: tier, planExpiresAt: expiresAt }),
 
@@ -108,6 +114,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     onboardingComplete: null, defaultCurrency: null, timezone: null,
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
     orgType: null, planTier: null, planExpiresAt: null, importedRowsCount: 0,
+    importedRowsPeriodStart: null,
     memberships: [], switching: false,
   }),
 

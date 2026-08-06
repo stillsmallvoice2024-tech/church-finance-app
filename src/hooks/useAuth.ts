@@ -38,7 +38,7 @@ async function fetchAllOrgMemberships(
 
   // Attempt 1: full columns including deletion-lifecycle + plan fields
   const res1 = await fetch(
-    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count)`,
+    `${base}&select=org_id,role,organizations(name,onboarding_complete,default_currency,timezone,status,deleted_at,purge_at,metadata,plan_tier,plan_expires_at,imported_rows_count,imported_rows_period_start)`,
     { signal, headers },
   )
 
@@ -58,6 +58,7 @@ async function fetchAllOrgMemberships(
         plan_tier:           PlanTier | null
         plan_expires_at:     string | null
         imported_rows_count: number | null
+        imported_rows_period_start: string | null
       } | null
     }>
     return rows.map(row => ({
@@ -74,6 +75,7 @@ async function fetchAllOrgMemberships(
       plan_tier:           row.organizations?.plan_tier ?? null,
       plan_expires_at:     row.organizations?.plan_expires_at ?? null,
       imported_rows_count: row.organizations?.imported_rows_count ?? 0,
+      imported_rows_period_start: row.organizations?.imported_rows_period_start ?? null,
     }))
   }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import BulkReallocation from './BulkReallocation'
+import { PlanGate } from '../components/auth/PlanGates'
 import {
   ArrowLeftRight, Plus, Pencil, Trash2,
   AlertCircle, RefreshCw, ChevronRight, ChevronDown,
@@ -272,7 +273,9 @@ export default function IntraFlow() {
             <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Bulk Reallocation</h1>
             <p className="text-sm text-gray-500 mt-0.5">Move money for many funds at once</p>
           </div>
-          <BulkReallocation />
+          <PlanGate feature="bulkReallocation">
+            <BulkReallocation />
+          </PlanGate>
         </div>
       ) : (
       <>

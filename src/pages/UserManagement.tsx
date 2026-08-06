@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   UserPlus, Shield, Users, User,
-  ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2,
+  ChevronDown, Pencil, XCircle, MailOpen, Eye, EyeOff, KeyRound, Trash2, Lock,
 } from 'lucide-react'
 import { Modal }           from '../components/ui/Modal'
 import { focusFirstInvalid } from '../components/ui/FormField'
@@ -13,9 +13,10 @@ import { DeleteOrgModal }  from '../components/modals/DeleteOrgModal'
 import { exportCSV }    from '../utils/csvExport'
 import { friendlyError } from '../utils/friendlyError'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
 import { useAuth }      from '../hooks/useAuth'
 import { useRole }      from '../hooks/useRole'
+import { usePlan, resolveEffectiveTier, tierAtLeast, FEATURE_TIERS } from '../hooks/usePlan'
 import { useToastStore } from '../store/toastStore'
 import { usePageTitle }  from '../hooks/usePageTitle'
 import { supabase }     from '../lib/supabase'
@@ -138,10 +139,18 @@ function InviteUserModal({
 
   const onSubmit = async (values: InviteForm) => {
     setLoading(true)
-    const { orgId } = useOrgStore.getState()
+    const { orgId, planTier, planExpiresAt } = useOrgStore.getState()
 
     if (!orgId) {
       toast('Cannot send invite: no active organisation. Please refresh and try again.', 'error')
+      setLoading(false)
+      return
+    }
+
+    // Authoritative check — the Invite button is already hidden on Free, but
+    // this is the actual bottleneck every invite goes through.
+    if (!tierAtLeast(resolveEffectiveTier(planTier, planExpiresAt), FEATURE_TIERS.teamInvites)) {
+      toast('Inviting team members requires the Growth plan or above.', 'error')
       setLoading(false)
       return
     }
@@ -548,8 +557,10 @@ function ChangePasswordModal({
 export default function UserManagement() {
   const { user, profile } = useAuth()
   const { isAdmin, isOwner, canTransferOwnership, role } = useRole()
+  const { hasFeature }    = usePlan()
   const { push: toast }   = useToastStore()
   const { orgId }         = useOrgStore()
+  const canInvite = hasFeature('teamInvites')
 
   usePageTitle('User Management')
   useFirstVisitTour('users')
@@ -694,15 +705,31 @@ export default function UserManagement() {
         <div className="flex items-center gap-2">
           <HelpButton tourId="usersTour" size="sm" />
           <ExportDropdown onExportView={handleExportView} onExportAll={handleExportAll} disabled={members.length === 0} />
-          <button
-            data-tour="invite-button"
-            onClick={() => setInviteOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
-          >
-            <UserPlus className="w-4 h-4" /> Invite User
-          </button>
+          {canInvite ? (
+            <button
+              data-tour="invite-button"
+              onClick={() => setInviteOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary-light"
+            >
+              <UserPlus className="w-4 h-4" /> Invite User
+            </button>
+          ) : (
+            <Link
+              to="/settings?tab=billing&locked=teamInvites"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 text-sm font-medium rounded-lg hover:bg-gray-200 dark:hover:bg-white/15 transition-colors"
+            >
+              <Lock className="w-4 h-4" /> Invite User
+            </Link>
+          )}
         </div>
       </div>
+
+      {!canInvite && (
+        <PageHelpBanner storageKey="help-dismissed-users-invite-locked" title="Inviting team members requires Level 1">
+          Clariva Start is a single-user plan. Move to Clariva Growth to invite admins, accountants and
+          viewers onto your organisation.
+        </PageHelpBanner>
+      )}
 
       <PageHelpBanner storageKey="help-dismissed-users" title="Managing Access">
         Invite users by email and assign a role: <strong>Admin</strong> (full configuration access),{' '}
