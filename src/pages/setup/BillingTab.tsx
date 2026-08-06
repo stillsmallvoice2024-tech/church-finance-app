@@ -53,7 +53,7 @@ const CONTACT_EMAIL = 'stillsmallvoice2024@gmail.com'
 const STRIPE_BILLING_ENABLED = false
 
 function planChangeEmail(orgName: string | null, currentTier: PlanTier, targetTier: PlanTier): EmailDraft {
-  const action = TIER_RANK[targetTier] > TIER_RANK[currentTier] ? 'Upgrade' : 'Downgrade'
+  const action = TIER_RANK[targetTier] > TIER_RANK[currentTier] ? 'Move' : 'Switch'
   return {
     to:      CONTACT_EMAIL,
     subject: `${action} to ${TIER_DISPLAY_NAME[targetTier]} — ${orgName ?? 'my organisation'}`,
@@ -444,7 +444,7 @@ export function BillingTab() {
           open
           onClose={() => setEmailDraft(null)}
           draft={emailDraft}
-          description="No email app set up? Use Gmail or copy the message below into whatever you use."
+          description="No email app available? Open Gmail or copy the message below into your preferred email service."
         />
       )}
     </div>
