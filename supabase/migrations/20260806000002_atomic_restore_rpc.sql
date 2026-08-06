@@ -42,56 +42,76 @@ DROP POLICY IF EXISTS "restore_allowed_tables_select" ON public.restore_allowed_
 CREATE POLICY "restore_allowed_tables_select" ON public.restore_allowed_tables
   FOR SELECT USING (auth.role() = 'authenticated');
 
--- Rewritten wholesale on every run so the allowlist can never drift from the
+-- Reconciled wholesale on every run so the allowlist can never drift from the
 -- registry: a table dropped from MANAGED_TABLES disappears here too.
-TRUNCATE public.restore_allowed_tables;
-
-INSERT INTO public.restore_allowed_tables
-  (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action)
-VALUES
-  -- Configuration
-  ('organizations',                    0, 'id',   false, false, 'update'),
-  -- currencies is a GLOBAL table (PK code, no org_id). It is deliberately never
-  -- deleted here: an unscoped wipe would clear the currency list for every
-  -- tenant on the instance, not just the one being restored.
-  ('currencies',                       1, 'code', false, false, 'update'),
-  ('category_groups',                  2, 'id',   true,  true,  'update'),
-  ('categories',                       3, 'id',   true,  true,  'update'),
-  ('category_opening_balances',        4, 'id',   true,  true,  'update'),
-  ('banks',                            5, 'id',   true,  true,  'update'),
-  -- Allocation
-  ('special_config_groups',            6, 'id',   true,  true,  'update'),
-  ('allocation_configs',               7, 'id',   true,  true,  'update'),
-  ('income_types',                     8, 'id',   true,  true,  'update'),
-  ('outflow_types',                    9, 'id',   true,  true,  'update'),
-  ('income_type_rules',               10, 'id',   true,  true,  'update'),
-  -- Transactions
-  ('inflow_transactions',             11, 'id',   true,  true,  'update'),
-  ('outflow_transactions',            12, 'id',   true,  true,  'update'),
-  ('intra_flows',                     13, 'id',   true,  true,  'update'),
-  ('bank_deposits',                   14, 'id',   true,  true,  'update'),
-  ('intrabank_transfers',             15, 'id',   true,  true,  'update'),
-  ('fx_transactions',                 16, 'id',   true,  true,  'update'),
-  ('fx_conversions',                  17, 'id',   true,  true,  'update'),
-  ('transaction_allocation_snapshots', 18, 'id',  true,  false, 'nothing'),
-  ('recalculation_logs',              19, 'id',   true,  false, 'nothing'),
-  -- Projects
-  ('special_projects',                20, 'id',   true,  true,  'update'),
-  ('project_entries',                 21, 'id',   true,  true,  'update'),
-  -- Reports
-  ('report_templates',                22, 'id',   true,  true,  'update'),
-  ('dynamic_reports',                 23, 'id',   true,  true,  'update'),
-  ('dynamic_report_blocks',           24, 'id',   true,  true,  'update'),
-  ('dynamic_report_snapshots',        25, 'id',   true,  true,  'update'),
-  -- Membership
-  ('org_members',                     26, 'id',   true,  false, 'update'),
-  -- Reconciliation
-  ('bank_statement_balances',         27, 'id',   true,  true,  'update'),
-  ('reconciliation_runs',             28, 'id',   true,  false, 'nothing'),
-  -- Audit trail: append-only, never deleted, never overwritten on conflict.
-  ('receipts',                        29, 'id',   true,  false, 'nothing'),
-  ('audit_log',                       30, 'id',   true,  false, 'nothing'),
-  ('field_changes',                   31, 'id',   true,  false, 'nothing');
+--
+-- Upsert + prune rather than TRUNCATE: restore_staging carries an FK to this
+-- table, and Postgres refuses to TRUNCATE a table referenced by a foreign key
+-- even when the referencing table is empty — which would make every re-run
+-- after the first one fail.
+WITH seed (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action) AS (
+  VALUES
+    -- Configuration
+    ('organizations'::text,               0::integer, 'id'::text,   false, false, 'update'::text),
+    -- currencies is a GLOBAL table (PK code, no org_id). It is deliberately
+    -- never deleted here: an unscoped wipe would clear the currency list for
+    -- every tenant on the instance, not just the one being restored.
+    ('currencies',                        1, 'code', false, false, 'update'),
+    ('category_groups',                   2, 'id',   true,  true,  'update'),
+    ('categories',                        3, 'id',   true,  true,  'update'),
+    ('category_opening_balances',         4, 'id',   true,  true,  'update'),
+    ('banks',                             5, 'id',   true,  true,  'update'),
+    -- Allocation
+    ('special_config_groups',             6, 'id',   true,  true,  'update'),
+    ('allocation_configs',                7, 'id',   true,  true,  'update'),
+    ('income_types',                      8, 'id',   true,  true,  'update'),
+    ('outflow_types',                     9, 'id',   true,  true,  'update'),
+    ('income_type_rules',                10, 'id',   true,  true,  'update'),
+    -- Transactions
+    ('inflow_transactions',              11, 'id',   true,  true,  'update'),
+    ('outflow_transactions',             12, 'id',   true,  true,  'update'),
+    ('intra_flows',                      13, 'id',   true,  true,  'update'),
+    ('bank_deposits',                    14, 'id',   true,  true,  'update'),
+    ('intrabank_transfers',              15, 'id',   true,  true,  'update'),
+    ('fx_transactions',                  16, 'id',   true,  true,  'update'),
+    ('fx_conversions',                   17, 'id',   true,  true,  'update'),
+    ('transaction_allocation_snapshots', 18, 'id',   true,  false, 'nothing'),
+    ('recalculation_logs',               19, 'id',   true,  false, 'nothing'),
+    -- Projects
+    ('special_projects',                 20, 'id',   true,  true,  'update'),
+    ('project_entries',                  21, 'id',   true,  true,  'update'),
+    -- Reports
+    ('report_templates',                 22, 'id',   true,  true,  'update'),
+    ('dynamic_reports',                  23, 'id',   true,  true,  'update'),
+    ('dynamic_report_blocks',            24, 'id',   true,  true,  'update'),
+    ('dynamic_report_snapshots',         25, 'id',   true,  true,  'update'),
+    -- Membership
+    ('org_members',                      26, 'id',   true,  false, 'update'),
+    -- Reconciliation
+    ('bank_statement_balances',          27, 'id',   true,  true,  'update'),
+    ('reconciliation_runs',              28, 'id',   true,  false, 'nothing'),
+    -- Audit trail: append-only, never deleted, never overwritten on conflict.
+    ('receipts',                         29, 'id',   true,  false, 'nothing'),
+    ('audit_log',                        30, 'id',   true,  false, 'nothing'),
+    ('field_changes',                    31, 'id',   true,  false, 'nothing')
+),
+-- Data-modifying CTEs always execute, referenced or not.
+upserted AS (
+  INSERT INTO public.restore_allowed_tables
+    (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action)
+  SELECT * FROM seed
+  ON CONFLICT (table_key) DO UPDATE SET
+    insert_order      = EXCLUDED.insert_order,
+    conflict_column   = EXCLUDED.conflict_column,
+    org_scoped        = EXCLUDED.org_scoped,
+    delete_in_replace = EXCLUDED.delete_in_replace,
+    conflict_action   = EXCLUDED.conflict_action
+  RETURNING table_key
+)
+-- Prune anything no longer in the registry. Fails loudly rather than silently
+-- if an in-flight batch still references the removed key.
+DELETE FROM public.restore_allowed_tables a
+WHERE a.table_key NOT IN (SELECT s.table_key FROM seed s);
 
 -- ── 2. Staging ───────────────────────────────────────────────────────────────
 -- The client inserts here over as many round-trips as the payload needs. These
