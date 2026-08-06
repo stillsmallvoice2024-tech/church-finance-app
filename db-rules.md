@@ -246,13 +246,27 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 - **`MANAGED_TABLES`** — registry of 24 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`; includes `organizations` (priority 0, `merge`) and `org_members` (priority 25, `merge`, `sensitive: true`, depends on `organizations`)
 - **`restoreMode`** per table: `replace` (delete+insert), `merge` (upsert, rows preserved), `append` (upsert, nothing deleted — used for audit/log tables)
-- **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'` and `backupEnabled`). Never manually maintained.
+- **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'`, `backupEnabled`, and `orgScoped !== false`). Never manually maintained. The `orgScoped` filter matters: `deleteFull` can only scope a DELETE by `org_id`, so `currencies` and `organizations` would otherwise be wiped instance-wide for every tenant. Both are restored by upsert instead.
 - **`currencies` PK is `code`** (not `id`) — `conflictColumn: 'code'` required for upsert. All other tables use `conflictColumn: 'id'`.
 - **Backup file format v2**: `{ _meta: BackupManifest, managed: {}, unmanaged: {} }`. v1 files (`{ _meta, data: {} }`) are auto-upgraded via `normalizeToV2()` inside `parseBackupFile()`.
 - **Schema discovery**: `discoverSchemaTables()` queries `schema_discovery_view`. If view is absent, backup still works but unmanaged detection is skipped. Install via `SCHEMA_DISCOVERY_MIGRATION_SQL` (exported constant).
 - **`compareRegistryToSchema()`** — developer utility; returns `{ inRegistry, inDb, notInRegistry, notInDb }` — useful for checking registry completeness after adding new tables.
 - **Supabase Storage**: `backups/` bucket; `createShareableLink()` uploads backup JSON and returns a 7-day signed URL.
 - **Strict mode**: when enabled, backup aborts if `schema_discovery_view` is unavailable or unmanaged tables are detected with data.
+
+### Atomic restore (`20260806000002_atomic_restore_rpc.sql`)
+
+Restore is **one transaction**, not a sequence of PostgREST round-trips. Delete and insert commit together or not at all.
+
+- **`restore_allowed_tables`** — server-side mirror of `MANAGED_TABLES`. Every identifier `commit_restore` interpolates into dynamic SQL comes from here; `restore_staging.table_key` is FK'd to it, so an unknown table is rejected at staging time. `TRUNCATE`d and re-seeded on every migration run so it cannot drift from the registry. **Adding a table to `MANAGED_TABLES` means adding it here too.**
+- **Flow**: insert a `restore_batches` row → insert N `restore_staging` chunks (500 rows each, ordinary RLS-protected writes, nothing destructive) → one `commit_restore(batch_id, mode, acknowledge_data_loss)` call that replays the lot. Chunking the *upload* is safe; the *commit* is never chunked.
+- **`commit_restore`** is `SECURITY DEFINER`, so it re-checks `is_org_owner()` explicitly and forces `org_id = <batch org>` on every inserted row — a backup taken from another org cannot write into this one. Only owners may restore. `statement_timeout` is raised to 600s for the transaction.
+- **`conflict_action`** — `'update'` upserts; `'nothing'` is insert-only, used for append-mode/audit tables so a restore can never overwrite existing audit rows.
+- **Column intersection**: only columns present in *both* the payload and the live schema are written, so an older backup does not null out newer columns and a newer backup does not abort on dropped ones. Generated/identity-always columns are excluded.
+- **Replace guard runs twice** — `preflightReplace()` client-side (better message, cheaper failure) and again inside `commit_restore` (the client is not a trust boundary). Both compare live row counts to what the backup carries and refuse without `acknowledgeDataLoss`.
+- **`restoreFromBackup` returns `path`**: `'atomic'` (rolled back cleanly on failure) or `'staged'` (legacy per-table path, may be partially applied — flagged via `partiallyApplied`). The staged path now **fails fast** on the first error; `replace` is refused entirely when the migration is absent, since delete+insert cannot share a transaction.
+- **Unmanaged tables are outside the transaction** by definition — they run after a successful commit and stay best-effort/isolated.
+- `purge_stale_restore_batches()` sweeps batches abandoned mid-upload (default: older than 24h).
 
 ---
 
