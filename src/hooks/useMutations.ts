@@ -5,6 +5,11 @@ import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
 import type { StartingBalanceRow } from './useBanks'
+import {
+  cascadeCategoryRename,
+  countCategoryReferences,
+  describeCategoryReferences,
+} from '../utils/categoryReferences'
 
 const BULK_CHUNK_SIZE = 500
 
@@ -659,6 +664,15 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
         .select('id')
       if (err) throw err
       if (!updatedRows?.length) throw new Error('Category not found or update was denied.')
+
+      // Fund linkage is by name (stage_code_1 / account_from / rows[].category_name),
+      // so a rename must be cascaded or every historical row is orphaned.
+      const oldName = (oldData as { name?: string } | null)?.name
+      const orgId   = useOrgStore.getState().orgId
+      if (oldName && orgId && oldName !== input.name) {
+        await cascadeCategoryRename(orgId, oldName, input.name)
+      }
+
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'categories', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)
     } catch (err) {
@@ -680,8 +694,24 @@ export function useDeleteCategory(): MutationHook<string> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
-      const { error: err } = await supabase.from('categories').delete().eq('id', id)
+      // Referential guard: without a FK, deleting a referenced fund leaves its money
+      // summed under a name that no longer exists in any dropdown.
+      const { data: cat } = await supabase.from('categories').select('name, org_id').eq('id', id).single()
+      const orgId = (cat as { org_id?: string } | null)?.org_id ?? useOrgStore.getState().orgId
+      const name  = (cat as { name?: string } | null)?.name
+      if (orgId && name) {
+        const refs = await countCategoryReferences(orgId, id, name)
+        if (refs.total > 0) {
+          throw new Error(
+            `"${name}" is still used by ${describeCategoryReferences(refs)}. ` +
+            'Hide the fund instead, or reassign those records first.',
+          )
+        }
+      }
+      const { error: err, count } = await supabase
+        .from('categories').delete({ count: 'exact' }).eq('id', id)
       if (err) throw err
+      if (count === 0) throw new Error('Category not found or delete was denied.')
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
