@@ -4,9 +4,32 @@ import { useAuthStore } from '../store/authStore'
 import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
+import { normalizeId } from '../utils/normalizeId'
 import type { StartingBalanceRow } from './useBanks'
 
 const BULK_CHUNK_SIZE = 500
+
+// Transaction references are unique per (org, bank) in the database, and the
+// index compares them normalised (public.normalize_txn_ref mirrors normalizeId).
+// The import already normalises before writing; manual entry did not, so a ref
+// pasted with a trailing space or a soft hyphen stored a variant that the
+// import's dedup pre-check — which compares against the raw stored text —
+// would never match. Normalise on the way in so stored text, pre-check and
+// index all agree. An all-whitespace ref becomes null rather than '', so it is
+// treated as "no reference" and exempted instead of colliding with every other
+// blank one.
+const REF_COLUMNS = ['transaction_ref', 'transaction_id'] as const
+
+function normalizeRefFields<T extends object>(input: T): T {
+  const out = { ...input } as Record<string, unknown>
+  for (const col of REF_COLUMNS) {
+    if (!(col in out)) continue
+    const raw = out[col]
+    if (typeof raw !== 'string') continue
+    out[col] = normalizeId(raw) || null
+  }
+  return out as T
+}
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -187,7 +210,7 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('inflow_transactions')
-        .insert({ ...input, created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(input), created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -235,7 +258,7 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     try {
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...input, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(input), is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -358,10 +381,12 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         .eq('id', id)
         .single()
 
+      const normalized = normalizeRefFields(updates)
+
       // Only inflow_transactions and outflow_transactions have updated_at
       const withTimestamp = table !== 'intra_flows'
-        ? { ...updates, updated_at: new Date().toISOString() }
-        : updates
+        ? { ...normalized, updated_at: new Date().toISOString() }
+        : normalized
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
@@ -780,7 +805,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
         p_deposit:         input.deposit    ?? 0,
         p_withdrawal:      input.withdrawal ?? 0,
         p_narration:       input.narration       ?? null,
-        p_transaction_ref: input.transaction_ref ?? null,
+        p_transaction_ref: normalizeId(input.transaction_ref ?? '') || null,
         p_bank_name:       input.bank_name       ?? null,
         p_bank_id:         input.bank_id         ?? null,
       })
@@ -830,7 +855,7 @@ export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput>
         p_deposit:         input.deposit    ?? 0,
         p_withdrawal:      input.withdrawal ?? 0,
         p_narration:       input.narration       ?? null,
-        p_transaction_ref: input.transaction_ref ?? null,
+        p_transaction_ref: normalizeId(input.transaction_ref ?? '') || null,
         p_bank_name:       input.bank_name       ?? null,
         p_bank_id:         input.bank_id         ?? null,
       })

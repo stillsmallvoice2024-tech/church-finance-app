@@ -26,6 +26,15 @@ export function friendlyError(err: unknown, action?: string): string {
     return `${prefix}You don't have permission for this action.`
   if (m.includes('jwt') || m.includes('not authenticated') || m.includes('invalid claim'))
     return `${prefix}Your session expired — please sign in again.`
+  // Named before the generic duplicate-key branch so the transaction-reference
+  // indexes explain themselves — "a record with this name already exists" is
+  // meaningless when the collision is on a reference the user just typed.
+  if (m.includes('_org_bank_ref_unique'))
+    return `${prefix}A transaction with this reference already exists for this bank. ` +
+           `Check the ledger — this transaction may already have been recorded.`
+  if (m.includes('banks_org_name_unique'))
+    return `${prefix}A bank account with this name already exists. ` +
+           `Add something that tells them apart, like the account type or the last four digits.`
   if (m.includes('duplicate key') || m.includes('already exists'))
     return `${prefix}A record with this name already exists.`
   if (m.includes('foreign key') || m.includes('violates'))

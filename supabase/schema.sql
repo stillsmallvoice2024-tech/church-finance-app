@@ -88,6 +88,51 @@ create unique index if not exists organizations_name_unique
   on public.organizations (public.normalize_org_name(name))
   where status <> 'pending_deletion';
 
+-- Bank names are unique per org, case- and whitespace-insensitive. bank_name is
+-- denormalised text on every transaction table and BankLedger reads rows back by
+-- it, so two same-named banks would blend into one ledger — and the transaction
+-- ref indexes below key on bank identity, so one account's refs would suppress
+-- the other's.
+create or replace function public.normalize_bank_name(p_name text)
+returns text language sql immutable set search_path = public as $$
+  select lower(btrim(regexp_replace(coalesce(p_name, ''), '\s+', ' ', 'g')));
+$$;
+
+-- Mirrors src/utils/normalizeId.ts: NFC, strip invisible characters, collapse
+-- whitespace, trim. Case is preserved — bank refs are case-sensitive. Returns
+-- NULL for a blank ref, which is how the uniqueness indexes exempt rows that
+-- carry no reference.
+create or replace function public.normalize_txn_ref(p_ref text)
+returns text language sql immutable set search_path = public as $$
+  select nullif(
+    btrim(regexp_replace(
+      translate(
+        normalize(coalesce(p_ref, ''), nfc),
+        -- soft hyphen, NBSP, ZWSP/ZWNJ/ZWJ, LS/PS, BOM
+        chr(173) || chr(160) || chr(8203) || chr(8204) || chr(8205)
+                 || chr(8232) || chr(8233) || chr(65279),
+        ''
+      ),
+      '\s+', ' ', 'g'
+    )),
+    ''
+  );
+$$;
+
+-- Uniqueness scope for a transaction ref is the bank account, keyed on
+-- bank_name rather than bank_id. bank_name is set on every row that has a
+-- bank_id (the import writes both together) AND on legacy rows written before
+-- bank_id existed, so keying on it puts old and new rows for the same bank in
+-- the same key space — keying on bank_id would let a legacy row and a new row
+-- for one bank hold the same ref. Names are unique per org (see
+-- banks_org_name_unique), so name and account are 1:1. bank_id is the fallback
+-- for the inverse case, and rows with neither share the '' key, which keeps
+-- unmatched statement rows constrained instead of exempt.
+create or replace function public.txn_bank_key(p_bank_id uuid, p_bank_name text)
+returns text language sql immutable set search_path = public as $$
+  select coalesce(nullif(public.normalize_bank_name(p_bank_name), ''), p_bank_id::text, '');
+$$;
+
 create table public.org_members (
   id         uuid        primary key default gen_random_uuid(),
   org_id     uuid        not null references public.organizations(id) on delete cascade,
@@ -369,6 +414,8 @@ create table public.banks (
                                    references public.organizations(id) on delete set null,
   created_at                       timestamptz default now()
 );
+create unique index if not exists banks_org_name_unique
+  on public.banks (org_id, public.normalize_bank_name(name));
 
 -- ── Allocation Configs ────────────────────────────────────────────────────────
 create table public.allocation_configs (
@@ -1648,6 +1695,21 @@ create index if not exists idx_inflow_root_txn_id     on public.inflow_transacti
 create index if not exists idx_outflow_root_txn_id    on public.outflow_transactions(root_transaction_id) where root_transaction_id is not null;
 create index if not exists idx_inflow_offset_role     on public.inflow_transactions(offset_role) where offset_role is not null;
 create index if not exists idx_outflow_offset_role    on public.outflow_transactions(offset_role) where offset_role is not null;
+-- Transaction references are unique per (org, bank account). Import dedup is a
+-- client-side pre-check (src/utils/dedupQuery.ts) — without these indexes two
+-- concurrent imports, or one retry after a write timeout, silently duplicate a
+-- whole statement. The pre-check stays as a fast path; these are the enforcement.
+-- Rows with no reference are exempt. intra_flows is not covered: no bank column,
+-- manual entry only (no race), and reversal rows may reuse a reference.
+create unique index if not exists inflow_transactions_org_bank_ref_unique
+  on public.inflow_transactions (org_id, public.txn_bank_key(bank_id, bank_name), public.normalize_txn_ref(transaction_ref))
+  where public.normalize_txn_ref(transaction_ref) is not null;
+create unique index if not exists outflow_transactions_org_bank_ref_unique
+  on public.outflow_transactions (org_id, public.txn_bank_key(bank_id, bank_name), public.normalize_txn_ref(transaction_id))
+  where public.normalize_txn_ref(transaction_id) is not null;
+create unique index if not exists fx_transactions_org_bank_ref_unique
+  on public.fx_transactions (org_id, public.txn_bank_key(bank_id, bank_name), public.normalize_txn_ref(transaction_ref))
+  where public.normalize_txn_ref(transaction_ref) is not null;
 create index if not exists idx_inflow_deposit_group   on public.inflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_outflow_deposit_group  on public.outflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_categories_group       on public.categories(group_id);
@@ -3190,6 +3252,55 @@ create policy "bsb_update" on public.bank_statement_balances
 create policy "bsb_delete" on public.bank_statement_balances
   for delete using (public.is_org_admin(org_id));
 create index if not exists idx_bsb_org_bank on public.bank_statement_balances(org_id, bank_name);
+
+-- ================================================================
+-- 11b. DUPLICATE REFERENCE REPORT
+-- ================================================================
+-- Diagnostic for the uniqueness indexes above: on an existing database they
+-- cannot be created until the listed rows are resolved. security_invoker so RLS
+-- applies and each org sees only its own duplicates.
+
+create or replace view public.duplicate_transaction_refs
+with (security_invoker = true) as
+  select 'inflow_transactions'::text                   as source_table,
+         org_id,
+         public.txn_bank_key(bank_id, bank_name)       as bank_key,
+         max(bank_name)                                as bank_name,
+         public.normalize_txn_ref(transaction_ref)     as normalized_ref,
+         count(*)                                      as row_count,
+         sum(amount)                                   as total_amount,
+         min(date)                                     as first_date,
+         max(date)                                     as last_date,
+         array_agg(id order by created_at, id)         as row_ids
+  from   public.inflow_transactions
+  where  public.normalize_txn_ref(transaction_ref) is not null
+  group  by org_id, 3, 5
+  having count(*) > 1
+  union all
+  select 'outflow_transactions'::text, org_id,
+         public.txn_bank_key(bank_id, bank_name), max(bank_name),
+         public.normalize_txn_ref(transaction_id), count(*),
+         sum(coalesce(amount_disbursed, 0)), min(date), max(date),
+         array_agg(id order by created_at, id)
+  from   public.outflow_transactions
+  where  public.normalize_txn_ref(transaction_id) is not null
+  group  by org_id, 3, 5
+  having count(*) > 1
+  union all
+  select 'fx_transactions'::text, org_id,
+         public.txn_bank_key(bank_id, bank_name), max(bank_name),
+         public.normalize_txn_ref(transaction_ref), count(*),
+         sum(coalesce(deposit, 0) + coalesce(withdrawal, 0)), min(date), max(date),
+         array_agg(id order by created_at, id)
+  from   public.fx_transactions
+  where  public.normalize_txn_ref(transaction_ref) is not null
+  group  by org_id, 3, 5
+  having count(*) > 1;
+
+grant select  on public.duplicate_transaction_refs        to authenticated;
+grant execute on function public.normalize_bank_name(text)  to authenticated;
+grant execute on function public.normalize_txn_ref(text)    to authenticated;
+grant execute on function public.txn_bank_key(uuid, text)   to authenticated;
 
 -- ================================================================
 -- 12. SCHEMA RELOAD

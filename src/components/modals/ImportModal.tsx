@@ -27,6 +27,7 @@ import {
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
+import { claimRef } from '../../utils/claimRef'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
@@ -242,6 +243,14 @@ interface ImportResult {
   errors:          string[]
   fallbackIdCount: number
   collisions:      string[]
+  /**
+   * Rows the database rejected as already present, after they passed the dedup
+   * pre-check. Counted within `skipped`. A non-zero value means someone else
+   * imported the same rows between the pre-check and the write, or this import
+   * is a retry of one that actually landed — the outcome is correct either way,
+   * but it's worth surfacing so the user knows why the counts differ.
+   */
+  raceDuplicates?: number
   /**
    * Rows whose insert batch failed. A 10k-row import is ~40 sequential round
    * trips; without this a failure partway through left rows in the database
@@ -1240,6 +1249,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setRetrying(true)
     const errors: string[] = []
     let imported = 0
+    let duplicates = 0
     const stillInflows:  Record<string, unknown>[] = []
     const stillOutflows: Record<string, unknown>[] = []
     const BATCH = 250
@@ -1254,7 +1264,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (error) {
             // Isolate the actually-bad row(s) instead of failing the whole batch again.
             const split = await insertBatchResilient(async r => supabase.from(table).insert(r), batch)
-            imported += split.imported
+            imported   += split.imported
+            // A retried row the database already holds is resolved, not still
+            // failing — drop it from the failed bucket so Retry can reach zero.
+            duplicates += split.duplicates.length
             bucket.push(...split.failed)
             for (const m of new Set(split.errors)) errors.push(`${table}: ${m}`)
           } else imported += batch.length
@@ -1268,6 +1281,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         ...prev,
         imported: prev.imported + imported,
         skipped:  Math.max(0, prev.skipped - imported),
+        raceDuplicates: (prev.raceDuplicates ?? 0) + duplicates,
         errors:   errors.length > 0 ? [...prev.errors, ...errors] : prev.errors,
         failedRows: (stillInflows.length || stillOutflows.length)
           ? { inflows: stillInflows, outflows: stillOutflows }
@@ -1328,6 +1342,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     // Dup skip set — built from pre-import stage only (skipTxnIds passed from Import.tsx)
     const allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])
     let fallbackIdCount = 0
+    let raceDuplicates  = 0
     const collisions: string[] = []
 
     // ── Bank statement split mode ─────────────────────────────────────────────
@@ -1355,7 +1370,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         if (recordedMode === 'txn_date'  && txnDate)     return `${txnDate}T00:00:00.000Z`
         return importTimestamp
       }
-      // Collision trackers for fallback IDs: hash → count of times seen this batch
+      // Collision trackers: reference → count of times seen this batch.
+      //
+      // Applied to bank-provided references as well as generated fallback IDs.
+      // Statements do occasionally repeat a reference across two genuine rows
+      // (a split settlement, a charge posted against its parent's ref), and the
+      // transaction-ref unique index would reject the second one — losing a real
+      // transaction. Suffixing keeps both rows and flags them for review, which
+      // is the same treatment fallback-ID collisions already get.
       const inflowIdCounts  = new Map<string, number>()
       const outflowIdCounts = new Map<string, number>()
 
@@ -1408,15 +1430,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (!row.transaction_ref) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
             // Falls back to on-the-fly generation as a safety net.
-            const baseId = precomputedInflowIds[ri]
+            row.transaction_ref = precomputedInflowIds[ri]
               ?? await generateFallbackTransactionId(
                 String(date), String(credit), desc ?? '', internalBank?.name ?? ''
               )
-            const count = inflowIdCounts.get(baseId) ?? 0
-            inflowIdCounts.set(baseId, count + 1)
-            row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
             fallbackIdCount++
-            if (count > 0) collisions.push(
+          }
+          {
+            const baseRef = String(row.transaction_ref)
+            row.transaction_ref = claimRef(inflowIdCounts, baseRef)
+            if (row.transaction_ref !== baseRef) collisions.push(
               `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
             )
           }
@@ -1435,15 +1458,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (internalBank) { row.bank_name = internalBank.name; row.bank_id = internalBank.id }
           if (!row.transaction_id) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
-            const baseId = precomputedOutflowIds[ri]
+            row.transaction_id = precomputedOutflowIds[ri]
               ?? await generateFallbackTransactionId(
                 String(date), String(debit), desc ?? '', internalBank?.name ?? ''
               )
-            const count = outflowIdCounts.get(baseId) ?? 0
-            outflowIdCounts.set(baseId, count + 1)
-            row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
             fallbackIdCount++
-            if (count > 0) collisions.push(
+          }
+          {
+            const baseId = String(row.transaction_id)
+            row.transaction_id = claimRef(outflowIdCounts, baseId)
+            if (row.transaction_id !== baseId) collisions.push(
               `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_id as string).slice(-10)}`
             )
           }
@@ -1563,8 +1587,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const split = await insertBatchResilient(
             async rows => supabase.from('inflow_transactions').insert(rows), rowsToRetry,
           )
-          imported += split.imported
-          skipped  += split.failed.length
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
           failedInflows.push(...split.failed)
           for (const m of new Set(split.errors)) {
             errors.push(m.includes('invalid input syntax for type uuid')
@@ -1591,8 +1616,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const split = await insertBatchResilient(
             async rows => supabase.from('outflow_transactions').insert(rows), rowsToRetry,
           )
-          imported += split.imported
-          skipped  += split.failed.length
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
           failedOutflows.push(...split.failed)
           for (const m of new Set(split.errors)) {
             errors.push(m.includes('invalid input syntax for type uuid')
@@ -1628,7 +1654,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
       importCompletedRef.current = true
       setResult({
-        imported, skipped, errors, fallbackIdCount, collisions,
+        imported, skipped, errors, fallbackIdCount, collisions, raceDuplicates,
         failedRows: (failedInflows.length || failedOutflows.length)
           ? { inflows: failedInflows, outflows: failedOutflows }
           : undefined,
@@ -1759,14 +1785,18 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           row.transaction_ref = rawRef
         } else {
           // Generate deterministic fallback ref from date + amount + narration + bank
-          const baseRef = await generateFallbackTransactionId(
+          row.transaction_ref = await generateFallbackTransactionId(
             String(date), String(dep || wd), narr, internalBank?.name ?? ''
           )
-          const count = fxIdCounts.get(baseRef) ?? 0
-          fxIdCounts.set(baseRef, count + 1)
-          row.transaction_ref = count === 0 ? baseRef : `${baseRef}-${count}`
           fallbackIdCount++
-          if (count > 0) collisions.push(
+        }
+        {
+          // Same de-collision as the bank-statement path: provided refs are
+          // suffixed too, so a statement that repeats one keeps both rows
+          // instead of losing the second to the unique index.
+          const baseRef = String(row.transaction_ref)
+          row.transaction_ref = claimRef(fxIdCounts, baseRef)
+          if (row.transaction_ref !== baseRef) collisions.push(
             `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
           )
         }
@@ -1824,7 +1854,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         const batch = newFxRows.slice(i, i + BATCH)
         const { error: err } = await supabase.from('fx_transactions').insert(batch)
         if (err) {
-          errors.push(`FX batch: ${friendlyError(err, 'process FX')}`); skipped += batch.length
+          // Split the batch so one duplicate (or one bad row) doesn't cost the
+          // other 99 — the fx_transactions ref index rejects the whole INSERT.
+          const split = await insertBatchResilient(
+            async rows => supabase.from('fx_transactions').insert(rows), batch,
+          )
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
+          for (const m of new Set(split.errors)) errors.push(`FX row: ${m}`)
         } else {
           imported += batch.length
         }
@@ -1832,7 +1870,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       importCompletedRef.current = true
-      setResult({ imported, skipped, errors, fallbackIdCount, collisions })
+      setResult({ imported, skipped, errors, fallbackIdCount, collisions, raceDuplicates })
     }
     } catch (e: unknown) {
       errors.push(friendlyError(e, 'import'))
@@ -3850,6 +3888,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                   {result.skipped > 0 && <div className="text-amber-600">⚠ {result.skipped} rows skipped</div>}
                   {result.fallbackIdCount > 0 && (
                     <div className="text-blue-600 dark:text-blue-400">ℹ {result.fallbackIdCount} fallback ID(s) auto-generated</div>
+                  )}
+                  {(result.raceDuplicates ?? 0) > 0 && (
+                    <div className="text-blue-600 dark:text-blue-400">
+                      ℹ {result.raceDuplicates} row(s) were already in the database and were not
+                      added again — they landed between the duplicate check and the import, or
+                      this run repeated an earlier one. Nothing was duplicated.
+                    </div>
                   )}
                 </div>
                 {(() => {
