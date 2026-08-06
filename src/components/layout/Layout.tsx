@@ -10,7 +10,6 @@ import { TourEngine } from '../onboarding/TourEngine'
 import { SetupWizard } from '../onboarding/SetupWizard'
 import { HelpCenter } from '../onboarding/HelpCenter'
 import { CommandPalette } from '../ui/CommandPalette'
-import { TierSwitcher } from '../dev/TierSwitcher'
 
 export function Layout() {
   const [sidebarOpen,     setSidebarOpen]     = useState(false)
@@ -78,8 +77,6 @@ export function Layout() {
 
       <BottomTabBar />
       <ToastContainer />
-      {/* TEMPORARY — remove before shipping to main, see TierSwitcher.tsx */}
-      <TierSwitcher />
       <FloatingCalculator />
       <TourEngine />
       <SetupWizard />
