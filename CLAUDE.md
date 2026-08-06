@@ -84,7 +84,8 @@ supabase/
 - **All writes** via `useMutations.ts`. Pattern: `const { mutate } = useAddInflow(); await mutate(input)`
 - **All reads** via `use<Entity>.ts` hooks → `{ data, loading, error, refetch }`. Mutations call `refetch` on success.
 - **`bank_name` is plain text** (not FK). Must be set at insert time — `NULL` = invisible to BankLedger.
-- **Fund linkage is by name, not FK.** `stage_code_1`, `intra_flows.account_from/account_to`, and `allocation_configs.rows[].category_name` all store the category name as text. Renames must cascade and deletes must be blocked when referenced — always go through `src/utils/categoryReferences.ts` (`cascadeCategoryRename`, `countCategoryReferences`); never `UPDATE`/`DELETE` a category row directly.
+- **`category_id` is the authoritative fund link; `stage_code_1` is a display snapshot.** Set both at insert time. Reads that group by fund must resolve `category_id` → the category's current name (`resolveFundName`) and fall back to `stage_code_1` only for pre-backfill rows. `intra_flows` uses `from_category_id`/`to_category_id` the same way; `allocation_configs.rows[].category_name` is still name-only (jsonb) and relies on the rename cascade.
+- **Renames must cascade, deletes must be blocked when referenced** — always go through `src/utils/categoryReferences.ts` (`cascadeCategoryRename`, `countCategoryReferences`); never `UPDATE`/`DELETE` a category row directly.
 - **Every UPDATE**: fetch old record → `logAudit()` (snapshot to `audit_log`) → `logFieldChanges()` (diff to `field_changes`).
 - **Deletes** use `count: 'exact'`; throw if `count === 0` to catch silent RLS denials.
 - **Import is sole transaction entry point.** Inflows/Outflows pages are display-only (edit/delete only).

@@ -544,6 +544,7 @@ create table public.inflow_transactions (
   description               text,
   amount                    numeric(15,2) not null default 0,
   stage_code_1              text,
+  category_id               uuid        references public.categories(id) on delete set null,
   stage_code_2              text,
   stage_code_3              text,
   transaction_ref           text,
@@ -585,6 +586,7 @@ create table public.outflow_transactions (
   transfer_charge         numeric(15,2) default 0,
   bank_total              numeric(15,2) default 0,
   stage_code_1            text,
+  category_id             uuid        references public.categories(id) on delete set null,
   stage_code_2            text,
   remarks                 text,
   bank_name               text,
@@ -1656,6 +1658,8 @@ create index if not exists idx_outflow_department_id  on public.outflow_transact
 create index if not exists idx_invitation_emails_invitation on public.invitation_emails(invitation_id);
 create index if not exists idx_invitation_emails_sent_at    on public.invitation_emails(sent_at desc);
 create index if not exists idx_cob_category           on public.category_opening_balances(category_id);
+create index if not exists idx_inflow_category_id      on public.inflow_transactions(category_id);
+create index if not exists idx_outflow_category_id     on public.outflow_transactions(category_id);
 create index if not exists idx_report_templates_user  on public.report_templates(created_by);
 create index if not exists idx_alloc_config_group     on public.allocation_configs(config_group_id);
 create index if not exists idx_drb_report_position    on public.dynamic_report_blocks(report_id, position);

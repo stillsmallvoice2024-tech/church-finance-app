@@ -13,6 +13,54 @@ import { supabase } from '../lib/supabase'
  * cascade the new name to every referencing row after renaming.
  */
 
+// ── Name ⇄ id resolution ──────────────────────────────────────────────────────
+
+/**
+ * Current name for every category in the org, keyed by id.
+ * `category_id` is the authoritative fund link; `stage_code_1` is a display
+ * snapshot that can lag behind a rename on rows written before the backfill.
+ */
+export async function fetchCategoryNamesById(orgId: string): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (!orgId) return map
+  const { data, error } = await supabase
+    .from('categories').select('id, name').eq('org_id', orgId)
+  if (error) throw new Error(error.message)
+  for (const c of (data ?? []) as Array<{ id: string; name: string }>) map.set(c.id, c.name)
+  return map
+}
+
+/**
+ * Resolves a category name to its id so writes can stamp `category_id`.
+ * Returns null for an unknown name — the text snapshot is still written, so an
+ * unmatched row degrades to the old name-keyed behaviour rather than being lost.
+ */
+export async function resolveCategoryId(orgId: string, name: string | null | undefined):
+  Promise<string | null> {
+  if (!orgId || !name) return null
+  const { data, error } = await supabase
+    .from('categories').select('id').eq('org_id', orgId).eq('name', name).maybeSingle()
+  if (error) return null
+  return (data as { id?: string } | null)?.id ?? null
+}
+
+/**
+ * The fund a row belongs to: the category's *current* name when the row carries
+ * a resolvable `category_id`, otherwise the `stage_code_1` text snapshot.
+ * This is what makes grouping immune to renames.
+ */
+export function resolveFundName(
+  namesById: Map<string, string>,
+  categoryId: string | null | undefined,
+  snapshot: string | null | undefined,
+): string | null {
+  if (categoryId) {
+    const current = namesById.get(categoryId)
+    if (current) return current
+  }
+  return snapshot ?? null
+}
+
 export interface CategoryReferenceCounts {
   inflows:           number
   outflows:          number

@@ -9,6 +9,7 @@ import {
   cascadeCategoryRename,
   countCategoryReferences,
   describeCategoryReferences,
+  resolveCategoryId,
 } from '../utils/categoryReferences'
 
 const BULK_CHUNK_SIZE = 500
@@ -84,6 +85,35 @@ async function batchLogFieldChanges(_rows: Array<{
   new_value: string | null
 }>): Promise<void> {}
 
+
+// A stage_code_1 edit moves the row to a different fund. intra_flows keys funds
+// by account_from/account_to instead, and has its own *_category_id columns, so
+// it is left alone here.
+async function syncCategoryIdOnUpdate(
+  table: string,
+  updates: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (table !== 'inflow_transactions' && table !== 'outflow_transactions') return updates
+  if (!('stage_code_1' in updates) || 'category_id' in updates) return updates
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) return updates
+  const name = updates.stage_code_1
+  if (typeof name !== 'string' || !name) return { ...updates, category_id: null }
+  return { ...updates, category_id: await resolveCategoryId(orgId, name) }
+}
+
+// Fund linkage: stamp category_id from the stage_code_1 name at insert time so
+// the row survives a later rename. stage_code_1 stays as the display snapshot.
+async function withCategoryId<T extends { stage_code_1?: string; category_id?: string | null }>(
+  input: T,
+): Promise<T> {
+  if (input.category_id || !input.stage_code_1) return input
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) return input
+  const id = await resolveCategoryId(orgId, input.stage_code_1)
+  return id ? { ...input, category_id: id } : input
+}
+
 // ── Input types ────────────────────────────────────────────────────────────────
 
 export interface AddInflowInput {
@@ -103,6 +133,7 @@ export interface AddInflowInput {
   transaction_type?: string
   original_transaction_id?: string
   income_type_id?: string
+  category_id?: string | null
   bank_name?: string
   bank_id?: string | null
   recorded_at?: string
@@ -133,6 +164,7 @@ export interface AddOutflowInput {
   original_transaction_id?: string
   outflow_type_id?: string | null
   department_id?: string | null
+  category_id?: string | null
   bank_name?: string
   bank_id?: string | null
   recorded_at?: string
@@ -190,9 +222,10 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     setError(null)
 
     try {
+      const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('inflow_transactions')
-        .insert({ ...input, created_by: user.id, ...orgPayload() })
+        .insert({ ...payload, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -238,9 +271,10 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     setError(null)
 
     try {
+      const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...input, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
+        .insert({ ...payload, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -363,10 +397,14 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         .eq('id', id)
         .single()
 
+      // A stage_code_1 edit repoints the row at a different fund — re-resolve
+      // category_id so the authoritative link follows the displayed name.
+      const resolved = await syncCategoryIdOnUpdate(table, updates)
+
       // Only inflow_transactions and outflow_transactions have updated_at
       const withTimestamp = table !== 'intra_flows'
-        ? { ...updates, updated_at: new Date().toISOString() }
-        : updates
+        ? { ...resolved, updated_at: new Date().toISOString() }
+        : resolved
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
@@ -1279,9 +1317,10 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
     let totalUpdated = 0
     const failures: BulkRowFailure[] = []
 
+    const resolvedBase = await syncCategoryIdOnUpdate(table, baseUpdates)
     const updates: Record<string, unknown> = table !== 'intra_flows'
-      ? { ...baseUpdates, updated_at: new Date().toISOString() }
-      : { ...baseUpdates }
+      ? { ...resolvedBase, updated_at: new Date().toISOString() }
+      : { ...resolvedBase }
 
     try {
       for (const chunk of chunkArray(ids, BULK_CHUNK_SIZE)) {
