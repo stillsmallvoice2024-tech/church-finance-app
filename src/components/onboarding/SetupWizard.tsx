@@ -432,6 +432,9 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const { mutate: addBank } = useAddBank()
   const { push: toast } = useToastStore()
   const defaultCurrency = useOrgStore(s => s.defaultCurrency)
+  const { quantityLimit } = usePlan()
+  const bankLimit = quantityLimit('multiBank')
+  const atCap = !loading && bankLimit !== null && banks.length >= bankLimit
 
   const [name, setName]         = useState('')
   const [acctNum, setAcctNum]   = useState('')
@@ -467,7 +470,11 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
     <div className="space-y-4">
       <StepHeading
         title="Which bank accounts does your organisation use?"
-        description="Add every account your organisation operates — your main account, a project account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
+        description={
+          bankLimit === 1
+            ? "Add your organisation's bank account. The name you enter here must match your bank statement exactly when you import transactions."
+            : "Add every account your organisation operates — your main account, a project account, a foreign currency account. The name you enter here must match your bank statement exactly when you import transactions."
+        }
       />
 
       {!loading && banks.length > 0 && (
@@ -481,6 +488,11 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
         </div>
       )}
 
+      {atCap ? (
+        <PlanLockedNote tierLabel={TIER_SHORT_NAME.level1}>
+          Clariva Start supports 1 bank account, and you've already added yours. Add more once you upgrade.
+        </PlanLockedNote>
+      ) : (
       <form onSubmit={handleAdd} className="space-y-2">
         {error && (
           <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded-lg border border-red-200 dark:border-red-800">
@@ -527,6 +539,7 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
           </button>
         </div>
       </form>
+      )}
 
       {!loading && banks.length === 0 && (
         <p className="text-xs text-gray-500 dark:text-gray-500 italic">
