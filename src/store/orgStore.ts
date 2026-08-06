@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { OrgStatus, PlanTier, UserRole } from '../types'
+import type { OrgStatus, PlanStatus, PlanTier, UserRole } from '../types'
 
 export interface OrgMembership {
   org_id:               string
@@ -15,6 +15,8 @@ export interface OrgMembership {
   plan_tier?:           PlanTier | null
   plan_expires_at?:     string | null
   imported_rows_count?: number | null
+  plan_status?:         PlanStatus | null
+  trial_ends_at?:       string | null
 }
 
 const activeOrgKey = (userId: string) => `org-active-${userId}`
@@ -33,6 +35,8 @@ interface OrgState {
   planTier:            PlanTier | null
   planExpiresAt:       string | null
   importedRowsCount:   number
+  planStatus:          PlanStatus | null
+  trialEndsAt:         string | null
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -63,6 +67,8 @@ export const useOrgStore = create<OrgState>((set) => ({
   planTier:           null,
   planExpiresAt:      null,
   importedRowsCount:  0,
+  planStatus:         null,
+  trialEndsAt:        null,
   memberships:        [],
   switching:          false,
 
@@ -83,6 +89,8 @@ export const useOrgStore = create<OrgState>((set) => ({
     planTier:           m.plan_tier !== undefined ? (m.plan_tier ?? null) : null,
     planExpiresAt:      m.plan_expires_at !== undefined ? (m.plan_expires_at ?? null) : null,
     importedRowsCount:  m.imported_rows_count ?? 0,
+    planStatus:         m.plan_status !== undefined ? (m.plan_status ?? null) : null,
+    trialEndsAt:        m.trial_ends_at !== undefined ? (m.trial_ends_at ?? null) : null,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -105,6 +113,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     onboardingComplete: null, defaultCurrency: null, timezone: null,
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
     orgType: null, planTier: null, planExpiresAt: null, importedRowsCount: 0,
+    planStatus: null, trialEndsAt: null,
     memberships: [], switching: false,
   }),
 

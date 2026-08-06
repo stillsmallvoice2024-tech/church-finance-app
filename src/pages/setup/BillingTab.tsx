@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Mail, AlertCircle, Check } from 'lucide-react'
+import { Mail, AlertCircle, Check, Loader2, Settings } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
+import { supabase } from '../../lib/supabase'
 import { useOrgStore } from '../../store/orgStore'
+import { useToastStore } from '../../store/toastStore'
 import { useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import {
   usePlan, FEATURE_TIERS, TIER_DISPLAY_NAME, TIER_PRICING, QUANTITY_LIMITS, TIER_RANK,
@@ -10,6 +12,9 @@ import {
 } from '../../hooks/usePlan'
 import type { PlanTier } from '../../types'
 import { formatDate } from '../../utils/formatters'
+
+type PayableTier = 'level1' | 'full'
+const isPayableTier = (t: PlanTier): t is PayableTier => t === 'level1' || t === 'full'
 
 const TIERS: PlanTier[] = ['free', 'level1', 'full']
 
@@ -60,15 +65,70 @@ type BillingCycle = 'monthly' | 'annual'
 interface FeatureItem { label: string; sub?: string }
 
 export function BillingTab() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const lockedFeature = searchParams.get('locked') as PlanFeature | null
+  const checkoutResult = searchParams.get('checkout')
   const [cycle, setCycle] = useState<BillingCycle>('monthly')
+  const [pendingTier, setPendingTier] = useState<PlanTier | null>(null)
+  const [portalPending, setPortalPending] = useState(false)
 
-  const orgName       = useOrgStore(s => s.orgName)
-  const planExpiresAt = useOrgStore(s => s.planExpiresAt)
+  const orgId          = useOrgStore(s => s.orgId)
+  const orgName        = useOrgStore(s => s.orgName)
+  const planExpiresAt  = useOrgStore(s => s.planExpiresAt)
+  const planStatus     = useOrgStore(s => s.planStatus)
+  const trialEndsAt    = useOrgStore(s => s.trialEndsAt)
   const { tier, importedRowsCount, importRowsRemaining } = usePlan()
   const { groups: customRuleGroups } = useSpecialConfigGroups()
   const customRuleCap = QUANTITY_LIMITS.customDistributionRules?.level1 ?? 2
+  const { push: toast } = useToastStore()
+
+  useEffect(() => {
+    if (!checkoutResult) return
+    if (checkoutResult === 'success') toast('Payment received — your plan is updating now.', 'success')
+    if (checkoutResult === 'cancelled') toast('Checkout was cancelled — no changes were made.', 'info')
+    const next = new URLSearchParams(searchParams)
+    next.delete('checkout')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutResult])
+
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / 86_400_000))
+    : null
+
+  async function startCheckout(targetTier: PayableTier) {
+    if (!orgId || pendingTier) return
+    setPendingTier(targetTier)
+    try {
+      const { data, error } = await supabase.functions.invoke('create-checkout-session', {
+        body: { org_id: orgId, tier: targetTier, cycle },
+      })
+      if (error) throw error
+      const result = data as { ok: boolean; url?: string; error?: string }
+      if (!result.ok || !result.url) throw new Error(result.error ?? 'Checkout could not be started')
+      window.location.href = result.url
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not start checkout', 'error')
+      setPendingTier(null)
+    }
+  }
+
+  async function openBillingPortal() {
+    if (!orgId || portalPending) return
+    setPortalPending(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('create-portal-session', {
+        body: { org_id: orgId },
+      })
+      if (error) throw error
+      const result = data as { ok: boolean; url?: string; error?: string }
+      if (!result.ok || !result.url) throw new Error(result.error ?? 'Billing portal is unavailable')
+      window.location.href = result.url
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not open billing portal', 'error')
+      setPortalPending(false)
+    }
+  }
 
   const FEATURES_BY_TIER: Record<PlanTier, FeatureItem[]> = {
     free: [
@@ -151,6 +211,16 @@ export function BillingTab() {
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Current plan</p>
             <span className="text-xl font-semibold text-gray-900 dark:text-gray-100 mt-1 block">
               {TIER_DISPLAY_NAME[tier]}
+              {planStatus === 'trialing' && trialDaysLeft !== null && (
+                <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wide text-primary bg-primary-50 dark:bg-primary/15 dark:text-primary-dm px-1.5 py-0.5 rounded-full">
+                  Trial · {trialDaysLeft} {trialDaysLeft === 1 ? 'day' : 'days'} left
+                </span>
+              )}
+              {planStatus === 'past_due' && (
+                <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wide text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-300 px-1.5 py-0.5 rounded-full">
+                  Payment failed
+                </span>
+              )}
             </span>
           </div>
 
@@ -184,8 +254,23 @@ export function BillingTab() {
           </div>
         </div>
 
-        {planExpiresAt && (
+        {planStatus === 'trialing' && trialEndsAt && (
+          <p className="text-xs text-gray-400 mt-3">Trial ends {formatDate(trialEndsAt)} — add a card in billing to keep {TIER_DISPLAY_NAME[tier]} after that.</p>
+        )}
+        {planStatus !== 'trialing' && planExpiresAt && (
           <p className="text-xs text-gray-400 mt-3">Plan valid until {formatDate(planExpiresAt)}</p>
+        )}
+
+        {tier !== 'free' && (
+          <button
+            type="button"
+            onClick={openBillingPortal}
+            disabled={portalPending}
+            className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary dark:text-primary-dm hover:underline disabled:opacity-60"
+          >
+            {portalPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Settings className="w-3.5 h-3.5" />}
+            Manage billing
+          </button>
         )}
       </Card>
 
@@ -245,19 +330,32 @@ export function BillingTab() {
                   <div className="w-full text-center text-sm font-semibold rounded-lg py-2.5 bg-primary-50 dark:bg-primary/15 text-primary dark:text-primary-dm">
                     Your current plan
                   </div>
-                ) : TIER_RANK[t] > TIER_RANK[tier] ? (
-                  <a
-                    href={planChangeMailto(orgName, tier, t)}
-                    className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity"
+                ) : TIER_RANK[t] > TIER_RANK[tier] && isPayableTier(t) ? (
+                  <button
+                    type="button"
+                    onClick={() => startCheckout(t)}
+                    disabled={pendingTier !== null}
+                    className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 bg-primary text-white hover:opacity-90 transition-opacity disabled:opacity-60"
                   >
-                    <Mail className="w-3.5 h-3.5" />
+                    {pendingTier === t ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                     Move to {TIER_SHORT_NAME[t]}
-                  </a>
+                  </button>
+                ) : t === 'free' ? (
+                  <button
+                    type="button"
+                    onClick={openBillingPortal}
+                    disabled={portalPending}
+                    className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-60"
+                  >
+                    {portalPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Cancel to {TIER_SHORT_NAME[t]}
+                  </button>
                 ) : (
                   <a
                     href={planChangeMailto(orgName, tier, t)}
                     className="w-full inline-flex items-center justify-center gap-2 text-sm font-semibold rounded-lg py-2.5 border border-gray-300 dark:border-white/15 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
                   >
+                    <Mail className="w-3.5 h-3.5" />
                     Switch to {TIER_SHORT_NAME[t]}
                   </a>
                 )}
