@@ -1,6 +1,7 @@
 export type UserRole   = 'owner' | 'admin' | 'accountant' | 'viewer'
 export type OrgStatus  = 'active' | 'pending_deletion'
 export type PlanTier   = 'free' | 'level1' | 'full'
+export type PlanStatus = 'active' | 'trialing' | 'past_due' | 'canceled'
 
 export interface UserProfile {
   id: string
