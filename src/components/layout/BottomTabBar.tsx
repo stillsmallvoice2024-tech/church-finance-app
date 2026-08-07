@@ -92,7 +92,7 @@ const DRAWER_SECTIONS: DrawerSection[] = [
 export function BottomTabBar() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { isAdmin, canWrite } = useRole()
-  const { hasFeature } = usePlan()
+  const { hasFeature, planLoading } = usePlan()
   const admin = isAdmin()
   const write = canWrite()
   const primaryTabs = BASE_PRIMARY_TABS
@@ -139,7 +139,8 @@ export function BottomTabBar() {
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
                     {visibleItems.map(({ label, path, icon: Icon, planFeature }) => {
-                      const locked = planFeature ? !hasFeature(planFeature) : false
+                      // Suppressed until the tier is known — see Sidebar.
+                      const locked = planFeature && !planLoading ? !hasFeature(planFeature) : false
                       return (
                         <NavLink
                           key={path}

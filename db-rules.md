@@ -220,6 +220,24 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 ---
 
+## Plan (Subscription Tier) Enforcement
+
+`20260807000000_plan_enforcement.sql`; mirrored in `schema.sql` §9 + §12. Tiers: `free` (Start) / `level1` (Growth) / `full` (Impact).
+
+**The database is the enforcer. React gates are presentation only.** Before this migration every gate was a `<div>`, `org_plan_at_least()` had zero call sites, and `resolveEffectiveTier(null)` failed open to `full` — deleting a DOM node or a failed org lookup granted Impact.
+
+- **Enforce on CREATE, never on READ/EDIT/DELETE.** A downgraded org keeps full read/edit/delete on everything created at a higher tier and simply cannot create more. All plan checks are INSERT-only, or (triggers) fire only when the gated value is actually introduced. Never add a plan check to an UPDATE `USING`/`WITH CHECK` — `WITH CHECK` can't see `OLD`, so it re-evaluates the existing row and traps data.
+- Predicates: `org_plan_at_least(org_id, tier)`, `org_effective_plan_tier(org_id)` (lazy expiry → `free`), `org_can_add_bank()`, `org_can_add_custom_rule()`, `org_plan_allows_txn_type()`. The quantity ones live before §9 because they count rows in Section 6 tables.
+- Gated INSERT policies — `level1`: `fx_transactions`, `fx_conversions`, `receipts`, `bank_statement_balances`, `invitations`, `report_templates`; `full`: `bank_deposits`, `intrabank_transfers`, `dynamic_reports`. `special_config_groups` uses the quantity predicate (Start 0 / Growth 2 / Impact ∞).
+- Triggers (what RLS can't express): `trg_bank_plan_limits` (1-bank cap on Start, 1-foreign-currency cap on Growth), `trg_inflow/outflow_txn_type_plan` (`refund`/`reversal`/`bank_deposit`/`intrabank_transfer` require `full`).
+- **Plan/billing columns are locked** by `trg_guard_org_plan_columns`. `orgs_update` is `using (is_org_admin(id))` with no `WITH CHECK`, so in Postgres the USING doubles as the check — an admin could set their own `plan_tier`. The guard blocks the 9 plan/stripe/import columns for anyone but the service role. Compares via `to_jsonb(new/old)`, not `new.<col>` — a direct reference to a column an unmigrated DB lacks raises `record new has no field ...` and takes down *every* organizations UPDATE.
+- Only the service role writes plan columns (`stripe-webhook`, `create-checkout-session`, `create-portal-session` all use `SUPABASE_SERVICE_ROLE_KEY`). `increment_import_count()` is the one user-triggered exception — it sets the transaction-local `app.plan_guard_bypass`.
+- Client mirror in `src/hooks/usePlan.ts` (`FEATURE_TIERS`, `QUANTITY_LIMITS`, `TXN_TYPE_FEATURE`). Change one, change the other; `planEnforcement.test.ts` asserts they agree.
+- `resolveEffectiveTier(null)` → `'free'` (fails closed). Consumers must branch on `planLoading` and render a neutral placeholder — `hasFeature()` is false while the tier is unknown, so any gate/route-guard/cap that skips the check will flash an upsell (or redirect) at paying orgs.
+- **Manual plan override (payment received outside Stripe):** `scripts/set-org-plan.mjs` — `node --env-file=.env.local scripts/set-org-plan.mjs --find "<name>"` then `--org <slug> --tier level1|full|free --months <n>` (or `--expires YYYY-MM-DD`). Uses the service role key, the same door the Stripe webhook uses — it's the intended way through the guard trigger, not a workaround. Refuses to touch an org with a live `stripe_subscription_id` unless `--force`d, to avoid drifting out of sync with a webhook that will overwrite it. Requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` (never commit it).
+
+---
+
 ## Special Config Versioning
 
 `special_config_groups` is the parent record. Each group can have multiple `allocation_configs` rows (versions), identified by `config_group_id`.
@@ -247,13 +265,27 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 - **`MANAGED_TABLES`** — registry of 24 tables with metadata: `key`, `label`, `module`, `restorePriority`, `backupEnabled`, `restoreMode`, `conflictColumn`, `requiresMigration`, `sensitive`, `optional`, `dependencies`; includes `organizations` (priority 0, `merge`) and `org_members` (priority 25, `merge`, `sensitive: true`, depends on `organizations`)
 - **`restoreMode`** per table: `replace` (delete+insert), `merge` (upsert, rows preserved), `append` (upsert, nothing deleted — used for audit/log tables)
-- **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'` and `backupEnabled`). Never manually maintained.
+- **`DELETE_TABLES`** — derived at module load from `MANAGED_TABLES` (reversed order, filtered to `restoreMode !== 'append'`, `backupEnabled`, and `orgScoped !== false`). Never manually maintained. The `orgScoped` filter matters: `deleteFull` can only scope a DELETE by `org_id`, so `currencies` and `organizations` would otherwise be wiped instance-wide for every tenant. Both are restored by upsert instead.
 - **`currencies` PK is `code`** (not `id`) — `conflictColumn: 'code'` required for upsert. All other tables use `conflictColumn: 'id'`.
 - **Backup file format v2**: `{ _meta: BackupManifest, managed: {}, unmanaged: {} }`. v1 files (`{ _meta, data: {} }`) are auto-upgraded via `normalizeToV2()` inside `parseBackupFile()`.
 - **Schema discovery**: `discoverSchemaTables()` queries `schema_discovery_view`. If view is absent, backup still works but unmanaged detection is skipped. Install via `SCHEMA_DISCOVERY_MIGRATION_SQL` (exported constant).
 - **`compareRegistryToSchema()`** — developer utility; returns `{ inRegistry, inDb, notInRegistry, notInDb }` — useful for checking registry completeness after adding new tables.
 - **Supabase Storage**: `backups/` bucket; `createShareableLink()` uploads backup JSON and returns a 7-day signed URL.
 - **Strict mode**: when enabled, backup aborts if `schema_discovery_view` is unavailable or unmanaged tables are detected with data.
+
+### Atomic restore (`20260806000002_atomic_restore_rpc.sql`)
+
+Restore is **one transaction**, not a sequence of PostgREST round-trips. Delete and insert commit together or not at all.
+
+- **`restore_allowed_tables`** — server-side mirror of `MANAGED_TABLES`. Every identifier `commit_restore` interpolates into dynamic SQL comes from here; `restore_staging.table_key` is FK'd to it, so an unknown table is rejected at staging time. `TRUNCATE`d and re-seeded on every migration run so it cannot drift from the registry. **Adding a table to `MANAGED_TABLES` means adding it here too.**
+- **Flow**: insert a `restore_batches` row → insert N `restore_staging` chunks (500 rows each, ordinary RLS-protected writes, nothing destructive) → one `commit_restore(batch_id, mode, acknowledge_data_loss)` call that replays the lot. Chunking the *upload* is safe; the *commit* is never chunked.
+- **`commit_restore`** is `SECURITY DEFINER`, so it re-checks `is_org_owner()` explicitly and forces `org_id = <batch org>` on every inserted row — a backup taken from another org cannot write into this one. Only owners may restore. `statement_timeout` is raised to 600s for the transaction.
+- **`conflict_action`** — `'update'` upserts; `'nothing'` is insert-only, used for append-mode/audit tables so a restore can never overwrite existing audit rows.
+- **Column intersection**: only columns present in *both* the payload and the live schema are written, so an older backup does not null out newer columns and a newer backup does not abort on dropped ones. Generated/identity-always columns are excluded.
+- **Replace guard runs twice** — `preflightReplace()` client-side (better message, cheaper failure) and again inside `commit_restore` (the client is not a trust boundary). Both compare live row counts to what the backup carries and refuse without `acknowledgeDataLoss`.
+- **`restoreFromBackup` returns `path`**: `'atomic'` (rolled back cleanly on failure) or `'staged'` (legacy per-table path, may be partially applied — flagged via `partiallyApplied`). The staged path now **fails fast** on the first error; `replace` is refused entirely when the migration is absent, since delete+insert cannot share a transaction.
+- **Unmanaged tables are outside the transaction** by definition — they run after a successful commit and stay best-effort/isolated.
+- `purge_stale_restore_batches()` sweeps batches abandoned mid-upload (default: older than 24h).
 
 ---
 

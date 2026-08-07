@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import { fetchAllRows } from './fetchAllRows'
 import { allocatePercent } from './financeMath'
 import { isNonContributing } from './transactionTypes'
+import { fetchCategoryNamesById, resolveFundName } from './categoryReferences'
 import {
   useAllocationStore,
   buildVersionIndex,
@@ -188,14 +189,14 @@ export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
   const { configs, groups } = useAllocationStore.getState()
 
   const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes, incomeTypeRes] = await Promise.all([
-    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount, date, specific_seed_description, description').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
-    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, amount').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
+    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount, date, specific_seed_description, description').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
+    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
     fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role, description').eq('org_id', orgId)),
     supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)').eq('org_id', orgId),
-    fetchAllRows(() => supabase.from('intra_flows').select('account_from, account_from_stage2, account_to, account_to_stage2, total_amount, date').eq('org_id', orgId).eq('status', 'active')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, amount_disbursed, offset_role').eq('org_id', orgId).not('stage_code_2', 'eq', 'Specific Seed').not('stage_code_2', 'eq', 'Savings')),
+    fetchAllRows(() => supabase.from('intra_flows').select('account_from, from_category_id, account_from_stage2, account_to, to_category_id, account_to_stage2, total_amount, date').eq('org_id', orgId).eq('status', 'active')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).not('stage_code_2', 'eq', 'Specific Seed').not('stage_code_2', 'eq', 'Savings')),
     supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId),
   ])
 
@@ -212,15 +213,39 @@ export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
     category:       (ob.categories as unknown as { name: string } | null)?.name ?? '',
   }))
 
+  // Fund grouping key: category_id is authoritative, stage_code_1 is a display
+  // snapshot that can lag behind a rename on rows written before the backfill.
+  // Resolve to the category's CURRENT name here, at the I/O boundary, so the
+  // aggregator below stays a pure name-keyed function.
+  let namesById = new Map<string, string>()
+  try { namesById = await fetchCategoryNamesById(orgId) } catch { /* fall back to the text snapshot */ }
+
+  type Snapshot = { stage_code_1?: string | null; category_id?: string | null }
+  const byFund = <T extends Snapshot>(rows: unknown): T[] =>
+    ((rows ?? []) as T[]).map(r => ({
+      ...r,
+      stage_code_1: resolveFundName(namesById, r.category_id, r.stage_code_1),
+    }))
+
+  type IntraSnapshot = {
+    account_from?: string | null; from_category_id?: string | null
+    account_to?:   string | null; to_category_id?:   string | null
+  }
+  const intraByFund = ((intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) as IntraSnapshot[]).map(r => ({
+    ...r,
+    account_from: resolveFundName(namesById, r.from_category_id, r.account_from),
+    account_to:   resolveFundName(namesById, r.to_category_id,   r.account_to),
+  }))
+
   const { byCategory, seedTargets } = aggregateFundBuckets({
-    seedInflows:  (seedRes.data ?? []) as FundBucketInputs['seedInflows'],
-    seedOutflows: (seedOutRes.data ?? []) as FundBucketInputs['seedOutflows'],
-    savInflows:   (savInRes.data ?? []) as FundBucketInputs['savInflows'],
-    savOutflows:  (savOutRes.data ?? []) as FundBucketInputs['savOutflows'],
+    seedInflows:  byFund(seedRes.data)     as unknown as FundBucketInputs['seedInflows'],
+    seedOutflows: byFund(seedOutRes.data)  as unknown as FundBucketInputs['seedOutflows'],
+    savInflows:   byFund(savInRes.data)    as unknown as FundBucketInputs['savInflows'],
+    savOutflows:  byFund(savOutRes.data)   as unknown as FundBucketInputs['savOutflows'],
     allInflows:   (allInflowRes.data ?? []) as FundBucketInputs['allInflows'],
     openingBalances,
-    intraFlows:   (intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) as FundBucketInputs['intraFlows'],
-    pctOutflows:  (pctOutRes.data ?? []) as FundBucketInputs['pctOutflows'],
+    intraFlows:   intraByFund as unknown as FundBucketInputs['intraFlows'],
+    pctOutflows:  byFund(pctOutRes.data)   as unknown as FundBucketInputs['pctOutflows'],
     incomeTypeGroup,
     configs,
     groups,

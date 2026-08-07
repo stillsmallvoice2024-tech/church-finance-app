@@ -43,13 +43,13 @@ export const FEATURE_TIERS: Record<PlanFeature, PlanTier> = {
 }
 
 // Which gated feature a given inflow/outflow `transaction_type` value
-// requires, if any — the underlying data model has no plan check of its own
-// (RLS allows any authenticated org member to write any transaction_type),
-// so every UI surface that lets a user pick one (Import, ImportModal,
-// AddInflowModal, AddOutflowModal) must filter its options through this so
-// a Free/Growth org can't create refund/reversal/bank_deposit/
-// intrabank_transfer rows the Adjustments/Bank Movement pages exist to
-// manage, just by not going through those pages.
+// requires, if any. Mirrored in the database by org_plan_allows_txn_type()
+// (20260807000000_plan_enforcement), which is what actually enforces this —
+// a trigger on inflow_transactions/outflow_transactions rejects a gated
+// type outright. The map below is the UI's half: it filters the options
+// every surface that lets a user pick one (Import, ImportModal,
+// AddInflowModal, AddOutflowModal) offers, so a Start/Growth org sees a
+// clean plan prompt instead of a database error. Keep the two in sync.
 export const TXN_TYPE_FEATURE: Partial<Record<string, PlanFeature>> = {
   refund:             'adjustments',
   reversal:           'adjustments',
@@ -100,11 +100,15 @@ export function tierAtLeast(tier: PlanTier, min: PlanTier): boolean {
 // read store state directly (`useOrgStore.getState()`) instead of subscribing.
 // Lazy expiry check, mirrors org_effective_plan_tier() in the DB — a
 // grandfathered/expired plan reverts to 'free' the moment it lapses.
-// `storedTier === null` covers both "not loaded yet" and "DB not migrated
-// yet" — fail open to 'full' rather than flash-locking a working org out of
-// features it already had.
+//
+// `storedTier === null` (not loaded, or column missing on an unmigrated DB)
+// resolves to 'free'. This used to return 'full' so a working org would
+// never flash-lock, but that made a failed org lookup hand out the top tier
+// — and since nothing else enforced plans, that was the whole ballgame.
+// Callers must not use a null tier as a "still loading" signal: read
+// `planLoading` from usePlan() for that and render a neutral placeholder.
 export function resolveEffectiveTier(storedTier: PlanTier | null, planExpiresAt: string | null): PlanTier {
-  if (storedTier === null) return 'full'
+  if (storedTier === null) return 'free'
   const expired = !!planExpiresAt && new Date(planExpiresAt).getTime() < Date.now()
   return expired ? 'free' : storedTier
 }
@@ -135,15 +139,25 @@ export function usePlan() {
   const loading        = useAuthStore((s) => s.loading)
   const storedTier      = useOrgStore((s) => s.planTier)
   const planExpiresAt   = useOrgStore((s) => s.planExpiresAt)
+  const planLoaded      = useOrgStore((s) => s.planLoaded)
+  const switching       = useOrgStore((s) => s.switching)
   const storedImportedRowsCount = useOrgStore((s) => s.importedRowsCount)
   const importedRowsPeriodStart = useOrgStore((s) => s.importedRowsPeriodStart)
 
-  const resolved = !loading && !!user
+  // Three states, not two: unlocked, locked, and *don't know yet*. Every
+  // predicate below reports "locked" while the tier is unknown, so nothing
+  // fails open — which makes the third state load-bearing. Gates, route
+  // guards and nav items must check `planLoading` first and render a neutral
+  // placeholder, or a paying org gets an upsell card (or worse, a redirect)
+  // for the moment between page load and the membership fetch landing.
+  const planLoading = loading || !user || switching || !planLoaded
+  const resolved = !planLoading
+
   const tier = resolveEffectiveTier(storedTier, planExpiresAt)
   const importedRowsCount = resolveEffectiveImportCount(storedImportedRowsCount, importedRowsPeriodStart)
 
   const hasFeature = (feature: PlanFeature): boolean => {
-    if (!resolved) return true // avoid flashing a locked state during hydration
+    if (!resolved) return false
     return tierAtLeast(tier, FEATURE_TIERS[feature])
   }
 
@@ -156,8 +170,9 @@ export function usePlan() {
 
   return {
     tier,
+    planLoading,
     isFree:          (): boolean => resolved && tier === 'free',
-    isLevel1OrAbove: (): boolean => !resolved || tierAtLeast(tier, 'level1'),
+    isLevel1OrAbove: (): boolean => resolved && tierAtLeast(tier, 'level1'),
     isFull:          (): boolean => resolved && tier === 'full',
     hasFeature,
     quantityLimit,

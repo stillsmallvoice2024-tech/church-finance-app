@@ -1483,6 +1483,17 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       let outflowToInsert = allSkipIds.size > 0
         ? outflowRows.filter(r => { const id = r.transaction_id as string | undefined; return !id || !allSkipIds.has(id) })
         : outflowRows
+      // Fund linkage: stamp category_id alongside the stage_code_1 text snapshot
+      // so these rows stay attached to their fund across a later rename.
+      const categoryIdByName = new Map(categories.map((c: { id: string; name: string }) => [c.name, c.id]))
+      const stampCategoryId = (rows: Record<string, unknown>[]) => rows.map(r => {
+        const name = r.stage_code_1
+        const id   = typeof name === 'string' ? categoryIdByName.get(name) : undefined
+        return id ? { ...r, category_id: id } : r
+      })
+      inflowToInsert  = stampCategoryId(inflowToInsert)
+      outflowToInsert = stampCategoryId(outflowToInsert)
+
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
 
@@ -1529,6 +1540,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         income_type_id:
           'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS income_type_id uuid;\n' +
           'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS income_type_id uuid;',
+        category_id:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES categories(id) ON DELETE SET NULL;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES categories(id) ON DELETE SET NULL;',
         recorded_at:
           'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
           'UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
