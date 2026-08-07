@@ -46,10 +46,10 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
     key: 'currencies', label: 'Currencies', module: 'Configuration',
     restorePriority: 1, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'code', orgScoped: false,
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
-    notes: 'PK is code, not id',
+    notes: 'Per-organisation currency list; code is unique within an org, not globally',
   },
   {
     key: 'category_groups', label: 'Fund Groups', module: 'Configuration',
@@ -281,8 +281,8 @@ export const BACKUP_TABLES = MANAGED_TABLES
 /** Delete order for replace mode — derived from registry, never stale.
  *  Excludes append-mode tables (they are never deleted) and non-org-scoped
  *  tables: `deleteFull` can only scope a DELETE by `org_id`, so a table without
- *  that column (`currencies`, `organizations`) would be wiped instance-wide for
- *  every tenant. Both are restored by upsert instead. */
+ *  that column (`organizations`) would be wiped instance-wide for every tenant.
+ *  Those are restored by upsert instead. */
 const DELETE_TABLES: string[] = [...MANAGED_TABLES]
   .reverse()
   .filter(t => t.restoreMode !== 'append' && t.backupEnabled && t.orgScoped !== false)
