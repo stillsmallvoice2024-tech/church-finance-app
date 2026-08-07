@@ -1081,6 +1081,73 @@ create policy "orgs_update" on public.organizations
 create policy "orgs_delete" on public.organizations
   for delete using (public.is_org_admin(id));
 
+-- Billing/metering columns are row-writable by any org admin under orgs_update,
+-- so they are locked at the column level and by a guard trigger. Only the
+-- service role (Stripe webhook) and SECURITY DEFINER functions may change them.
+revoke update on public.organizations from authenticated, anon;
+
+do $$
+declare
+  v_col text;
+  v_locked text[] := array[
+    'plan_tier',
+    'plan_status',
+    'plan_started_at',
+    'plan_expires_at',
+    'trial_ends_at',
+    'stripe_customer_id',
+    'stripe_subscription_id',
+    'imported_rows_count',
+    'imported_rows_period_start'
+  ];
+begin
+  for v_col in
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'organizations'
+      and not (column_name = any (v_locked))
+  loop
+    execute format(
+      'grant update (%I) on public.organizations to authenticated',
+      v_col
+    );
+  end loop;
+end $$;
+
+create or replace function public.guard_organization_billing_columns()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_user in ('service_role', 'postgres', 'supabase_admin') then
+    return new;
+  end if;
+
+  if new.plan_tier                  is distinct from old.plan_tier
+  or new.plan_status                is distinct from old.plan_status
+  or new.plan_started_at            is distinct from old.plan_started_at
+  or new.plan_expires_at            is distinct from old.plan_expires_at
+  or new.trial_ends_at              is distinct from old.trial_ends_at
+  or new.stripe_customer_id         is distinct from old.stripe_customer_id
+  or new.stripe_subscription_id     is distinct from old.stripe_subscription_id
+  or new.imported_rows_count        is distinct from old.imported_rows_count
+  or new.imported_rows_period_start is distinct from old.imported_rows_period_start
+  then
+    raise exception
+      'Billing and usage fields on organizations can only be changed by the billing system'
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.guard_organization_billing_columns() from public, anon, authenticated;
+
+drop trigger if exists guard_organization_billing_columns on public.organizations;
+create trigger guard_organization_billing_columns
+  before update on public.organizations
+  for each row execute function public.guard_organization_billing_columns();
+
 -- ── org_members ────────────────────────────────────────────────────────────────
 
 create policy "org_members_select" on public.org_members
