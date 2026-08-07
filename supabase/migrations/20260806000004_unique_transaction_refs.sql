@@ -8,7 +8,7 @@
 -- aborted request is not rolled back server-side), both land a duplicated set
 -- of transactions with nothing to flag it.
 --
--- Identity is the whole row: (org, bank, reference, date, amount, description).
+-- Identity is (org, bank, reference, date, amount, description, ref_occurrence).
 -- Keying on the reference alone would be wrong — banks reuse one reference
 -- across a transfer, its fee and the VAT on that fee, and every one of those is
 -- a real transaction.  Including date, amount and description keeps them apart
@@ -59,7 +59,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS inflow_transactions_org_bank_txn_unique
     public.normalize_txn_ref(transaction_ref),
     date,
     amount,
-    coalesce(public.normalize_txn_ref(description), '')
+    coalesce(public.normalize_txn_ref(description), ''),
+    ref_occurrence
   )
   WHERE public.normalize_txn_ref(transaction_ref) IS NOT NULL;
 
@@ -70,7 +71,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS outflow_transactions_org_bank_txn_unique
     public.normalize_txn_ref(transaction_id),
     date,
     amount_disbursed,
-    coalesce(public.normalize_txn_ref(description), '')
+    coalesce(public.normalize_txn_ref(description), ''),
+    ref_occurrence
   )
   WHERE public.normalize_txn_ref(transaction_id) IS NOT NULL;
 
@@ -82,6 +84,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS fx_transactions_org_bank_txn_unique
     date,
     deposit,
     withdrawal,
-    coalesce(public.normalize_txn_ref(narration), '')
+    coalesce(public.normalize_txn_ref(narration), ''),
+    ref_occurrence
   )
   WHERE public.normalize_txn_ref(transaction_ref) IS NOT NULL;

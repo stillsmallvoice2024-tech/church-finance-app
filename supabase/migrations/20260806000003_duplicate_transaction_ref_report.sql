@@ -70,7 +70,86 @@ AS $$
   SELECT coalesce(nullif(public.normalize_bank_name(p_bank_name), ''), p_bank_id::text, '');
 $$;
 
--- ── 3. Reporting view ────────────────────────────────────────────────────────
+-- ── 3. Occurrence index ──────────────────────────────────────────────────────
+-- A bank statement can legitimately contain two byte-identical lines: a
+-- transfer that fails is reversed and retried, and both attempts post under one
+-- Session ID with the same date, amount and narration.  No column tells them
+-- apart — not even the running balance, which lands on the same figure when
+-- nothing falls between the two attempts.  What separates them is their
+-- position in the statement.
+--
+-- `ref_occurrence` records that position among otherwise-identical rows: the
+-- first is 0, the second 1, and so on, in statement order.  The bank's
+-- reference is stored verbatim and never rewritten, so it stays usable for
+-- reconciliation.  Re-importing the same file reproduces the same numbering, so
+-- the duplicate still collides and is still blocked.
+
+ALTER TABLE public.inflow_transactions  ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;
+ALTER TABLE public.outflow_transactions ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;
+ALTER TABLE public.fx_transactions      ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;
+
+-- ── 4. Backfill ──────────────────────────────────────────────────────────────
+-- Existing identical rows are numbered ONLY where they arrived in the same
+-- import run — a reversal and its retry are written seconds apart by one run.
+-- Rows written by DIFFERENT runs are a statement imported twice; numbering
+-- those would bless a duplicate and bake the double-counted money in
+-- permanently.  They keep occurrence 0, stay colliding, and the index migration
+-- refuses to run until a human resolves them.
+--
+-- Five minutes is the cutoff: a single import writes its rows within seconds,
+-- and the smallest re-import gap worth worrying about is far larger.
+
+DO $$
+DECLARE
+  t record;
+BEGIN
+  FOR t IN
+    SELECT * FROM (VALUES
+      ('inflow_transactions',  'transaction_ref', 'amount',                                 'description'),
+      ('outflow_transactions', 'transaction_id',  'amount_disbursed',                       'description'),
+      -- fx splits its amount across two columns; both must partition, so this
+      -- is interpolated as an expression (%2$s) rather than an identifier.
+      ('fx_transactions',      'transaction_ref', 'coalesce(deposit,0), coalesce(withdrawal,0)', 'narration')
+    ) AS v(tbl, refcol, amtexpr, desccol)
+  LOOP
+    EXECUTE format($sql$
+      WITH grouped AS (
+        SELECT id,
+               row_number() OVER (
+                 PARTITION BY org_id,
+                              public.txn_bank_key(bank_id, bank_name),
+                              public.normalize_txn_ref(%1$I),
+                              date, %2$s,
+                              coalesce(public.normalize_txn_ref(%3$I), '')
+                 ORDER BY created_at, id
+               ) - 1 AS occ,
+               max(created_at) OVER (
+                 PARTITION BY org_id,
+                              public.txn_bank_key(bank_id, bank_name),
+                              public.normalize_txn_ref(%1$I),
+                              date, %2$s,
+                              coalesce(public.normalize_txn_ref(%3$I), '')
+               ) - min(created_at) OVER (
+                 PARTITION BY org_id,
+                              public.txn_bank_key(bank_id, bank_name),
+                              public.normalize_txn_ref(%1$I),
+                              date, %2$s,
+                              coalesce(public.normalize_txn_ref(%3$I), '')
+               ) AS spread
+        FROM   public.%4$I
+        WHERE  public.normalize_txn_ref(%1$I) IS NOT NULL
+      )
+      UPDATE public.%4$I tgt
+      SET    ref_occurrence = grouped.occ
+      FROM   grouped
+      WHERE  tgt.id = grouped.id
+        AND  grouped.occ > 0
+        AND  grouped.spread < interval '5 minutes'
+    $sql$, t.refcol, t.amtexpr, t.desccol, t.tbl);
+  END LOOP;
+END $$;
+
+-- ── 5. Reporting view ────────────────────────────────────────────────────────
 -- Groups on the full identity key, so every row it returns is a genuine
 -- duplicate — the same transaction recorded more than once. Postings that merely
 -- share a reference do not appear.
@@ -98,7 +177,7 @@ WITH (security_invoker = true) AS
   FROM   public.inflow_transactions
   WHERE  public.normalize_txn_ref(transaction_ref) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, amount,
-            coalesce(public.normalize_txn_ref(description), '')
+            coalesce(public.normalize_txn_ref(description), ''), ref_occurrence
   HAVING count(*) > 1
 
   UNION ALL
@@ -118,7 +197,7 @@ WITH (security_invoker = true) AS
   FROM   public.outflow_transactions
   WHERE  public.normalize_txn_ref(transaction_id) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, amount_disbursed,
-            coalesce(public.normalize_txn_ref(description), '')
+            coalesce(public.normalize_txn_ref(description), ''), ref_occurrence
   HAVING count(*) > 1
 
   UNION ALL
@@ -138,7 +217,7 @@ WITH (security_invoker = true) AS
   FROM   public.fx_transactions
   WHERE  public.normalize_txn_ref(transaction_ref) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, deposit, withdrawal,
-            coalesce(public.normalize_txn_ref(narration), '')
+            coalesce(public.normalize_txn_ref(narration), ''), ref_occurrence
   HAVING count(*) > 1;
 
 GRANT SELECT   ON public.duplicate_transactions            TO authenticated;

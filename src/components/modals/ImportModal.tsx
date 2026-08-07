@@ -25,9 +25,9 @@ import {
   type RowResolverState,
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
-import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
+import { fetchExistingRowCounts } from '../../utils/dedupQuery'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
-import { claimRef, rowFingerprint } from '../../utils/claimRef'
+import { nextOccurrence, rowFingerprint } from '../../utils/refOccurrence'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
@@ -457,6 +457,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // deterministic across repeated imports of the same file.
   const [precomputedInflowIds,  setPrecomputedInflowIds]  = useState<Record<number, string>>({})
   const [precomputedOutflowIds, setPrecomputedOutflowIds] = useState<Record<number, string>>({})
+  // Occurrence per row index, computed by markDuplicates against what the
+  // database already holds. Recomputing it in the insert loop would restart at
+  // 0 and collide with stored rows when a statement is imported in overlapping
+  // parts.
+  const [precomputedInflowOcc,  setPrecomputedInflowOcc]  = useState<Record<number, number>>({})
+  const [precomputedOutflowOcc, setPrecomputedOutflowOcc] = useState<Record<number, number>>({})
   // Row indices identified as DB duplicates — excluded from Step 4 configuration entirely.
   const [duplicateRis,    setDuplicateRis]    = useState<Set<number>>(new Set())
   const [dupCheckLoading, setDupCheckLoading] = useState(false)
@@ -1087,25 +1093,36 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       const dupOrgId = useOrgStore.getState().orgId
       if (!dupOrgId) { setDupCheckError('No active organisation.'); return }
 
-      const [existingInflowRefs, existingOutflowIds] = await Promise.all([
-        fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', inflowIdList, bankName, dupOrgId),
-        fetchExistingTransactionIds('outflow_transactions', 'transaction_id', outflowIdList, bankName, dupOrgId),
+      // Counts keyed on the WHOLE row, not the reference. A bank posts a
+      // transfer, its fee and the VAT on that fee under one Session ID, so
+      // matching on the reference marked the fee as a duplicate of the transfer
+      // and dropped a real transaction.
+      const [existingInflowCounts, existingOutflowCounts] = await Promise.all([
+        fetchExistingRowCounts('inflow_transactions',  'transaction_ref', 'amount',           'description', inflowIdList,  bankName, dupOrgId),
+        fetchExistingRowCounts('outflow_transactions', 'transaction_id',  'amount_disbursed', 'description', outflowIdList, bankName, dupOrgId),
       ])
 
-      // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates").
-      // Only apply if the pre-stage was scoped to the same bank — prevents cross-bank
+      // skipTxnIds from Import.tsx pre-stage (when the user chose "Skip
+      // Duplicates") is an explicit per-reference choice, so it stays
+      // reference-keyed and is applied on top of the row-identity counts.
+      // Only when the pre-stage used the same bank — prevents cross-bank
       // contamination when "Import Another" is used with a different bank.
-      if (skipTxnIds && (!skipTxnBankName || skipTxnBankName === bankName)) {
-        for (const id of skipTxnIds) {
-          const normalized = normalizeId(id)
-          existingInflowRefs.add(normalized)
-          existingOutflowIds.add(normalized)
-        }
-      }
+      const forceSkipRefs = skipTxnIds && (!skipTxnBankName || skipTxnBankName === bankName)
+        ? new Set([...skipTxnIds].map(normalizeId))
+        : undefined
 
       // ── Stage 5: Mark duplicate rows + compute stats ──────────────────────
-      const stats = markDuplicates(rows, existingInflowRefs, existingOutflowIds)
+      const stats = markDuplicates(rows, existingInflowCounts, existingOutflowCounts, forceSkipRefs)
       const newDuplicateRis = new Set<number>(rows.filter(r => r.isDuplicate).map(r => r.ri))
+      const inflowOcc:  Record<number, number> = {}
+      const outflowOcc: Record<number, number> = {}
+      for (const row of rows) {
+        if (row.isDuplicate) continue
+        if (row.kind === 'inflow') inflowOcc[row.ri] = row.refOccurrence
+        else                       outflowOcc[row.ri] = row.refOccurrence
+      }
+      setPrecomputedInflowOcc(inflowOcc)
+      setPrecomputedOutflowOcc(outflowOcc)
 
       setImportRows(rows)
       setDuplicateRis(newDuplicateRis)
@@ -1437,10 +1454,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             fallbackIdCount++
           }
           {
-            const baseRef = String(row.transaction_ref)
-            row.transaction_ref = claimRef(inflowIdCounts, baseRef, rowFingerprint(String(date), credit, desc))
-            if (row.transaction_ref !== baseRef) collisions.push(
-              `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+            // The reference is stored exactly as the bank gave it. Rows that are
+            // otherwise identical are separated by ref_occurrence instead — see
+            // src/utils/refOccurrence.ts. The value comes from the duplicate
+            // check, which counted what the database already holds.
+            const occ = precomputedInflowOcc[ri]
+              ?? nextOccurrence(inflowIdCounts, rowFingerprint(String(row.transaction_ref), String(date), credit, desc))
+            row.ref_occurrence = occ
+            if (occ > 0) collisions.push(
+              `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → occurrence ${occ}`
             )
           }
           if (txnType) row.transaction_type = txnType
@@ -1465,10 +1487,11 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             fallbackIdCount++
           }
           {
-            const baseId = String(row.transaction_id)
-            row.transaction_id = claimRef(outflowIdCounts, baseId, rowFingerprint(String(date), debit, desc))
-            if (row.transaction_id !== baseId) collisions.push(
-              `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_id as string).slice(-10)}`
+            const occ = precomputedOutflowOcc[ri]
+              ?? nextOccurrence(outflowIdCounts, rowFingerprint(String(row.transaction_id), String(date), debit, desc))
+            row.ref_occurrence = occ
+            if (occ > 0) collisions.push(
+              `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → occurrence ${occ}`
             )
           }
           const sc = rowStageCodes[ri]
@@ -1553,6 +1576,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         income_type_id:
           'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS income_type_id uuid;\n' +
           'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS income_type_id uuid;',
+        ref_occurrence:
+          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;\n' +
+          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;\n' +
+          'ALTER TABLE fx_transactions      ADD COLUMN IF NOT EXISTS ref_occurrence smallint NOT NULL DEFAULT 0;',
         recorded_at:
           'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
           'UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
@@ -1791,13 +1818,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           fallbackIdCount++
         }
         {
-          // Same de-collision as the bank-statement path: provided refs are
-          // suffixed too, so a statement that repeats one keeps both rows
-          // instead of losing the second to the unique index.
-          const baseRef = String(row.transaction_ref)
-          row.transaction_ref = claimRef(fxIdCounts, baseRef, rowFingerprint(String(date), dep || wd, narr))
-          if (row.transaction_ref !== baseRef) collisions.push(
-            `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+          // Same treatment as the bank-statement path: the reference is stored
+          // as the bank gave it, and identical rows are separated by occurrence.
+          const occ = nextOccurrence(
+            fxIdCounts,
+            rowFingerprint(String(row.transaction_ref), String(date), dep || wd, narr),
+          )
+          row.ref_occurrence = occ
+          if (occ > 0) collisions.push(
+            `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → occurrence ${occ}`
           )
         }
         if (userId) row.created_by = userId
@@ -1884,7 +1913,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       internalBank,
       rowIncomeTypes, incomeTypes,
       allocConfigs, allocGroups,
-      duplicateRis, precomputedInflowIds, precomputedOutflowIds])
+      duplicateRis, precomputedInflowIds, precomputedOutflowIds,
+      precomputedInflowOcc, precomputedOutflowOcc])
 
   // ── Render ────────────────────────────────────────────────────────────────
 

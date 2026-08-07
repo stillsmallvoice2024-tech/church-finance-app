@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase'
 import { normalizeId } from './normalizeId'
 import { chunkIds } from './chunkIds'
 import { mapWithConcurrency } from './mapWithConcurrency'
+import { rowFingerprint } from './refOccurrence'
 
 // Chunks are fetched concurrently but capped — a 50k-row import chunked at
 // 100 IDs/request is ~500 chunks per side, and firing all of them at once
@@ -45,4 +46,53 @@ export async function fetchExistingTransactionIds(
     }
   }
   return existing
+}
+
+/**
+ * Fetch how many rows already in the database match each full row identity —
+ * reference + date + amount + description — for the given references.
+ *
+ * The reference alone is not identity. A bank reuses one Session ID across a
+ * transfer, the fee on it and the VAT on that fee, so matching on the reference
+ * marks the fee as a duplicate of the transfer and silently drops a real
+ * transaction — the bug this replaces. It is also why the count matters rather
+ * than mere presence: a statement can legitimately carry the same row twice (a
+ * failed transfer, reversed and retried), and the import must skip exactly as
+ * many as the database already holds, not all of them.
+ *
+ * Chunked like fetchExistingTransactionIds, and errors are THROWN for the same
+ * reason — a failed check must never report everything as new.
+ */
+export async function fetchExistingRowCounts(
+  table: 'inflow_transactions' | 'outflow_transactions' | 'fx_transactions',
+  refColumn: 'transaction_ref' | 'transaction_id',
+  amountColumn: 'amount' | 'amount_disbursed',
+  descColumn: 'description' | 'narration',
+  ids: string[],
+  bankName: string | null,
+  orgId: string,
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>()
+  const unique = [...new Set(ids)].filter(Boolean)
+  if (unique.length === 0) return counts
+
+  const cols = `${refColumn}, date, ${amountColumn}, ${descColumn}`
+  const results = await mapWithConcurrency(chunkIds(unique), DEDUP_QUERY_CONCURRENCY, chunk => {
+    const base = supabase.from(table).select(cols).eq('org_id', orgId).in(refColumn, chunk)
+    return bankName ? base.eq('bank_name', bankName) : base
+  })
+
+  for (const { data, error } of results) {
+    if (error) throw error
+    for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const fp = rowFingerprint(
+        String(row[refColumn] ?? ''),
+        String(row.date ?? ''),
+        Number(row[amountColumn] ?? 0),
+        (row[descColumn] as string | null) ?? '',
+      )
+      counts.set(fp, (counts.get(fp) ?? 0) + 1)
+    }
+  }
+  return counts
 }

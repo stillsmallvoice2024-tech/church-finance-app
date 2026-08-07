@@ -611,6 +611,12 @@ create table public.inflow_transactions (
   allocation_config_id      uuid        references public.allocation_configs(id) on delete set null,
   income_type_id            uuid        references public.income_types(id) on delete set null,
   is_pending_deduction      boolean     not null default false,
+  -- Position among otherwise-identical rows in one statement (0 = first). A
+  -- failed transfer that is reversed and retried posts twice under one Session
+  -- ID with identical date, amount and narration; nothing else tells them
+  -- apart. Part of the uniqueness key, so the reference itself is never
+  -- rewritten and stays usable for reconciliation.
+  ref_occurrence            smallint    not null default 0,
   created_by                uuid        references public.profiles(id),
   recorded_at               timestamptz default now(),
   created_at                timestamptz default now(),
@@ -650,6 +656,7 @@ create table public.outflow_transactions (
   outflow_type_id         uuid        references public.outflow_types(id) on delete set null,
   department_id           uuid        references public.departments(id) on delete set null,
   is_pending_deduction    boolean     not null default false,
+  ref_occurrence          smallint    not null default 0,
   created_by              uuid        references public.profiles(id),
   recorded_at             timestamptz default now(),
   created_at              timestamptz default now(),
@@ -698,6 +705,7 @@ create table public.fx_transactions (
   running_balance numeric(15,4) default 0,
   bank_name       text,
   bank_id         uuid        references public.banks(id) on delete set null,
+  ref_occurrence  smallint    not null default 0,
   created_by      uuid        references public.profiles(id),
   org_id          uuid        not null default public.get_current_org_id()
                   references public.organizations(id) on delete set null,
@@ -1713,17 +1721,17 @@ create index if not exists idx_outflow_offset_role    on public.outflow_transact
 create unique index if not exists inflow_transactions_org_bank_txn_unique
   on public.inflow_transactions (org_id, public.txn_bank_key(bank_id, bank_name),
     public.normalize_txn_ref(transaction_ref), date, amount,
-    coalesce(public.normalize_txn_ref(description), ''))
+    coalesce(public.normalize_txn_ref(description), ''), ref_occurrence)
   where public.normalize_txn_ref(transaction_ref) is not null;
 create unique index if not exists outflow_transactions_org_bank_txn_unique
   on public.outflow_transactions (org_id, public.txn_bank_key(bank_id, bank_name),
     public.normalize_txn_ref(transaction_id), date, amount_disbursed,
-    coalesce(public.normalize_txn_ref(description), ''))
+    coalesce(public.normalize_txn_ref(description), ''), ref_occurrence)
   where public.normalize_txn_ref(transaction_id) is not null;
 create unique index if not exists fx_transactions_org_bank_txn_unique
   on public.fx_transactions (org_id, public.txn_bank_key(bank_id, bank_name),
     public.normalize_txn_ref(transaction_ref), date, deposit, withdrawal,
-    coalesce(public.normalize_txn_ref(narration), ''))
+    coalesce(public.normalize_txn_ref(narration), ''), ref_occurrence)
   where public.normalize_txn_ref(transaction_ref) is not null;
 create index if not exists idx_inflow_deposit_group   on public.inflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_outflow_deposit_group  on public.outflow_transactions(deposit_group_id) where deposit_group_id is not null;
@@ -3293,7 +3301,7 @@ WITH (security_invoker = true) AS
   FROM   public.inflow_transactions
   WHERE  public.normalize_txn_ref(transaction_ref) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, amount,
-            coalesce(public.normalize_txn_ref(description), '')
+            coalesce(public.normalize_txn_ref(description), ''), ref_occurrence
   HAVING count(*) > 1
 
   UNION ALL
@@ -3313,7 +3321,7 @@ WITH (security_invoker = true) AS
   FROM   public.outflow_transactions
   WHERE  public.normalize_txn_ref(transaction_id) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, amount_disbursed,
-            coalesce(public.normalize_txn_ref(description), '')
+            coalesce(public.normalize_txn_ref(description), ''), ref_occurrence
   HAVING count(*) > 1
 
   UNION ALL
@@ -3333,7 +3341,7 @@ WITH (security_invoker = true) AS
   FROM   public.fx_transactions
   WHERE  public.normalize_txn_ref(transaction_ref) IS NOT NULL
   GROUP  BY org_id, 3, 5, date, deposit, withdrawal,
-            coalesce(public.normalize_txn_ref(narration), '')
+            coalesce(public.normalize_txn_ref(narration), ''), ref_occurrence
   HAVING count(*) > 1;
 
 GRANT SELECT  ON public.duplicate_transactions             TO authenticated;

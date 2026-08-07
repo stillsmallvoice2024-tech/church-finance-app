@@ -19,7 +19,7 @@ function row(
   return {
     ri: 1, kind, date: '2026-03-01', amount: 1000,
     description: 'NIP TRANSFER TO JOHN DOE', ref: null, txnId: 'id-1',
-    isDuplicate: false,
+    isDuplicate: false, refOccurrence: 0,
     config: { ...emptyRowConfig(), ...config },
     resolution,
   }

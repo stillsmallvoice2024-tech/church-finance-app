@@ -188,7 +188,11 @@ describe('import duplicate checks are org-scoped', () => {
   it('all callers pass an orgId', () => {
     for (const f of ['components/modals/ImportModal.tsx', 'pages/Import.tsx']) {
       const code = src(f)
-      const calls = code.match(/fetchExistingTransactionIds\([^)]*\)/gs) ?? []
+      // Two dedup entry points: the Import page pre-stage still checks by
+      // reference, ImportModal checks by full row identity. Both must be
+      // org-scoped — an unscoped check skips a legitimate transaction whose
+      // reference happens to exist in another org.
+      const calls = code.match(/fetchExisting(?:TransactionIds|RowCounts)\([^)]*\)/gs) ?? []
       expect(calls.length).toBeGreaterThan(0)
       for (const c of calls) expect(c).toMatch(/,\s*\w*[Oo]rgId\s*\)/)
     }

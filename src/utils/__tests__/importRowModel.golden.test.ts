@@ -19,7 +19,9 @@ import {
   deriveColumnIndices,
   parseNumber,
   parseDebitAmount,
+  markDuplicates,
 } from '../buildImportRows'
+import { rowFingerprint } from '../refOccurrence'
 import { generateFallbackTransactionId } from '../generateTransactionId'
 import { normalizeId } from '../normalizeId'
 import { parseDate, type DateFormat } from '../parseDate'
@@ -123,9 +125,6 @@ async function legacyGenerateIds(
 
   const newInflowIds:  Record<number, string> = {}
   const newOutflowIds: Record<number, string> = {}
-  const inflowIdCounts  = new Map<string, number>()
-  const outflowIdCounts = new Map<string, number>()
-
   for (let ri = 0; ri < merged.length; ri++) {
     const raw    = merged[ri]
     const date   = dateIdx >= 0 ? parseDate(raw[dateIdx], dateFormat) : null
@@ -141,10 +140,10 @@ async function legacyGenerateIds(
       if (ref) {
         id = ref
       } else {
-        const baseId = await generateFallbackTransactionId(String(date), String(credit), desc, bankName)
-        const count = inflowIdCounts.get(baseId) ?? 0
-        inflowIdCounts.set(baseId, count + 1)
-        id = count === 0 ? baseId : `${baseId}-${count}`
+        // No suffix on repeats: two rows hashing alike ARE the same row, and
+        // ref_occurrence separates them now. Kept in the reference
+        // implementation so this golden still pins hashing itself.
+        id = await generateFallbackTransactionId(String(date), String(credit), desc, bankName)
       }
       newInflowIds[ri] = id
     }
@@ -156,10 +155,7 @@ async function legacyGenerateIds(
                         : ''
         id = chargeTag ? `${ref}${chargeTag}` : ref
       } else {
-        const baseId = await generateFallbackTransactionId(String(date), String(debit), desc, bankName)
-        const count = outflowIdCounts.get(baseId) ?? 0
-        outflowIdCounts.set(baseId, count + 1)
-        id = count === 0 ? baseId : `${baseId}-${count}`
+        id = await generateFallbackTransactionId(String(date), String(debit), desc, bankName)
       }
       newOutflowIds[ri] = id
     }
@@ -235,12 +231,35 @@ describe('importRowModel — pipeline behaviour the IDs depend on', () => {
     expect(ids).toContain('REF002')
   })
 
-  it('suffixes the second of two identical rows so only one is flagged duplicate', async () => {
+  // Identical rows used to be forced apart by suffixing the reference. They are
+  // now separated by ref_occurrence instead, so the reference the bank supplied
+  // (or the deterministic fallback hash) is stored verbatim on both.
+  it('gives two identical rows the same ref and distinct occurrences', async () => {
     const { rows } = await newGenerateIds()
     const identical = rows.filter(r => r.description === 'IDENTICAL ROW')
     expect(identical).toHaveLength(2)
-    expect(identical[0].txnId).not.toEqual(identical[1].txnId)
-    expect(identical[1].txnId).toMatch(/-1$/)
+    expect(identical[0].txnId).toEqual(identical[1].txnId)
+
+    markDuplicates(rows, new Map(), new Map())
+    expect(identical.map(r => r.refOccurrence)).toEqual([0, 1])
+  })
+
+  it('skips exactly as many identical rows as the database already holds', async () => {
+    const { rows } = await newGenerateIds()
+    const identical = rows.filter(r => r.description === 'IDENTICAL ROW')
+    const fp = rowFingerprint(identical[0].txnId, identical[0].date, identical[0].amount, identical[0].description)
+    const side = identical[0].kind === 'inflow' ? 'inflow' : 'outflow'
+
+    // One of the pair is already stored: skip that one, import the other as
+    // occurrence 1 so it coexists rather than colliding.
+    markDuplicates(
+      rows,
+      side === 'inflow'  ? new Map([[fp, 1]]) : new Map(),
+      side === 'outflow' ? new Map([[fp, 1]]) : new Map(),
+    )
+    expect(identical[0].isDuplicate).toBe(true)
+    expect(identical[1].isDuplicate).toBe(false)
+    expect(identical[1].refOccurrence).toBe(1)
   })
 
   it('strips invisible Unicode from descriptions before hashing', async () => {
