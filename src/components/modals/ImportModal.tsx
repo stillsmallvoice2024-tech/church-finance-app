@@ -27,7 +27,7 @@ import {
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
 import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
-import { claimRef } from '../../utils/claimRef'
+import { claimRef, rowFingerprint } from '../../utils/claimRef'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
@@ -1438,7 +1438,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           }
           {
             const baseRef = String(row.transaction_ref)
-            row.transaction_ref = claimRef(inflowIdCounts, baseRef)
+            row.transaction_ref = claimRef(inflowIdCounts, baseRef, rowFingerprint(String(date), credit, desc))
             if (row.transaction_ref !== baseRef) collisions.push(
               `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
             )
@@ -1466,7 +1466,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           }
           {
             const baseId = String(row.transaction_id)
-            row.transaction_id = claimRef(outflowIdCounts, baseId)
+            row.transaction_id = claimRef(outflowIdCounts, baseId, rowFingerprint(String(date), debit, desc))
             if (row.transaction_id !== baseId) collisions.push(
               `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_id as string).slice(-10)}`
             )
@@ -1795,7 +1795,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           // suffixed too, so a statement that repeats one keeps both rows
           // instead of losing the second to the unique index.
           const baseRef = String(row.transaction_ref)
-          row.transaction_ref = claimRef(fxIdCounts, baseRef)
+          row.transaction_ref = claimRef(fxIdCounts, baseRef, rowFingerprint(String(date), dep || wd, narr))
           if (row.transaction_ref !== baseRef) collisions.push(
             `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
           )

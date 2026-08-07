@@ -1,23 +1,18 @@
 -- ============================================================================
--- READ-ONLY: which transaction references are not unique, and why
+-- READ-ONLY: which transactions are recorded more than once
 -- ============================================================================
--- Safe to run on production at any time. It creates nothing, changes nothing,
--- and requires none of the uniqueness migrations to have been applied — every
--- helper is inlined. Run this BEFORE deciding anything.
+-- Safe to run on production at any time. Creates nothing, changes nothing, and
+-- requires none of the uniqueness migrations to have been applied — every
+-- helper is inlined. Run this BEFORE anything that writes.
 --
--- `likely_cause` is the column that matters:
+-- Identity is the whole row: (org, bank, reference, date, amount, description).
+-- A repeated reference alone is NOT a duplicate — a bank reuses one Session ID
+-- across a transfer, the fee on it and the VAT on that fee. Those differ in
+-- amount, so they do not appear here and need no action.
 --
---   'repeated import'  every row identical (same date, amount, description).
---                      The statement was imported twice. The surplus rows are
---                      not real transactions.
---
---   'shared reference' every row different. The bank reused one reference
---                      across several genuine postings — a NIP Session ID
---                      spanning a transfer and its COMMISSION and VAT lines,
---                      for example. Every one of these is a real transaction.
---                      NONE of them may be deleted.
---
---   'mixed'            both at once. Needs a human.
+-- Every group returned is the same transaction recorded more than once.
+-- `row_ids` is oldest-first: keep row_ids[1], the rest are the surplus.
+-- `overstated_amount` is what those surplus rows are adding to your books.
 --
 -- Empty result = nothing to resolve; the uniqueness migration will apply as-is.
 -- ============================================================================
@@ -54,21 +49,18 @@ WITH norm AS (
   FROM fx_transactions
 )
 SELECT source_table,
-       max(shown_bank)                                   AS bank,
-       nref                                              AS reference,
-       count(*)                                          AS row_count,
-       count(DISTINCT (date, amt, coalesce(narr,'')))    AS distinct_rows,
-       CASE
-         WHEN count(DISTINCT (date, amt, coalesce(narr,''))) = 1        THEN 'repeated import'
-         WHEN count(DISTINCT (date, amt, coalesce(narr,''))) = count(*) THEN 'shared reference'
-         ELSE 'mixed'
-       END                                               AS likely_cause,
-       sum(amt)                                          AS total_amount,
-       min(date)                                         AS first_date,
-       max(date)                                         AS last_date,
-       array_agg(id ORDER BY created_at, id)             AS row_ids
+       max(shown_bank)                       AS bank,
+       nref                                  AS reference,
+       date,
+       amt                                   AS amount,
+       max(narr)                             AS description,
+       count(*)                              AS row_count,
+       count(*) - 1                          AS surplus_rows,
+       amt * (count(*) - 1)                  AS overstated_amount,
+       array_agg(id ORDER BY created_at, id)  AS row_ids
 FROM   norm
 WHERE  nref IS NOT NULL
-GROUP  BY source_table, org_id, bank_key, nref
+GROUP  BY source_table, org_id, bank_key, nref, date, amt,
+          coalesce(btrim(regexp_replace(coalesce(narr,''),'\s+',' ','g')), '')
 HAVING count(*) > 1
-ORDER  BY likely_cause, row_count DESC;
+ORDER  BY overstated_amount DESC;
