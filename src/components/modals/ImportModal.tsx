@@ -29,6 +29,7 @@ import { fetchExistingRowCounts } from '../../utils/dedupQuery'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
 import { nextOccurrence, rowFingerprint } from '../../utils/refOccurrence'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
+import { auditDateColumn, DATE_SYMPTOM_TEXT } from '../../utils/dateAudit'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
@@ -995,6 +996,17 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   //   4. Query DB for ALL computed IDs (preset + fallback) to find duplicates
   //   5. Mark duplicate rows → excluded from Step 4 entirely
   //   6. Step 4 receives ONLY non-duplicate rows for configuration
+  // Date sanity, computed from the RAW cells before anything is written. The
+  // format selector is right beside the result, so a wrong choice shows up as
+  // findings the user can clear by picking the right one.
+  const dateAudit = useMemo(() => {
+    if (!sheet || !config) return null
+    // Both bank_statement and fx_transactions call the field 'date'.
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    if (dateIdx < 0) return null
+    return auditDateColumn((sheet.rows as unknown[][]).map(r => r[dateIdx]), dateFormat)
+  }, [sheet, config, mapping, dateFormat])
+
   const proceedToRowConfig = useCallback(async () => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
     setDupCheckLoading(true)
@@ -2308,6 +2320,49 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               ) : null
             })()}
 
+            {dateAudit && dateAudit.findings.length > 0 && (
+              <div className={`rounded-lg border px-4 py-3 space-y-3 ${
+                dateAudit.blocking
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-300'
+                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-300'
+              }`}>
+                <div className={`flex items-start gap-2 text-sm font-medium ${
+                  dateAudit.blocking ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    {dateAudit.blocking
+                      ? 'These dates cannot be imported as they are'
+                      : 'Check these dates before continuing'}
+                  </span>
+                </div>
+                {dateAudit.findings.map(f => (
+                  <div key={f.symptom} className="text-xs space-y-1 pl-6">
+                    <div className={f.blocking ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}>
+                      <strong>{f.count.toLocaleString()} of {dateAudit.total.toLocaleString()} rows</strong>{' '}
+                      {DATE_SYMPTOM_TEXT[f.symptom].title}. {DATE_SYMPTOM_TEXT[f.symptom].detail}
+                    </div>
+                    <div className="font-mono text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+                      {f.samples.map(sm => (
+                        <div key={sm.row}>
+                          row {sm.row}: {JSON.stringify(sm.raw)} →{' '}
+                          {sm.parsed ?? 'not a date — this row would be dropped'}
+                        </div>
+                      ))}
+                      {f.count > f.samples.length && (
+                        <div className="italic">…and {(f.count - f.samples.length).toLocaleString()} more</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {dateAudit.blocking && (
+                  <p className="text-xs text-red-700 dark:text-red-300 pl-6">
+                    Correct the date format above, or fix the dates in the file and upload it again.
+                  </p>
+                )}
+              </div>
+            )}
+
             {dupCheckError && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -2325,7 +2380,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                   if (!f.required) return false
                   if (f.key === 'currency' && fxCurrency) return false
                   return !mappedFields.has(f.key)
-                }) || dupCheckLoading
+                }) || dupCheckLoading || !!dateAudit?.blocking
               })()}
               nextLoading={dupCheckLoading}
               nextLabel={targetTable === 'bank_statement'
