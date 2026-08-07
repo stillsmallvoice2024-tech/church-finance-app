@@ -95,3 +95,38 @@ jobs:
               -v ON_ERROR_STOP=1 -f "$stashed"
             echo "::endgroup::"
           done < /tmp/new_migrations.txt
+
+      # Guards against exactly the drift this job exists to prevent: a
+      # migration merges but schema.sql — the fresh-install reference this
+      # repo ships and that CI itself treats as ground truth — never gets
+      # updated to match. Left unchecked, that gap is invisible until someone
+      # actually provisions a new environment from schema.sql (disaster
+      # recovery, staging, a second region) and it silently comes up missing
+      # the change. So: build a second, untouched database from schema.sql
+      # alone, and diff its post-migration structure against the one built
+      # above (schema.sql + this PR's migrations). A schema.sql that already
+      # reflects the PR's migrations converges to the same structure either
+      # way; any real difference means schema.sql needs the same update.
+      - name: Assert schema.sql already reflects this PR's migration(s)
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          BASELINE="postgresql://postgres:postgres@127.0.0.1:54322/schema_sql_only"
+
+          createdb -h 127.0.0.1 -p 54322 -U postgres schema_sql_only
+          psql "$BASELINE" -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+          pg_dump "$DB" --schema-only --no-owner --no-privileges \
+            | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
+            > /tmp/schema_plus_migrations.sql
+          pg_dump "$BASELINE" --schema-only --no-owner --no-privileges \
+            | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
+            > /tmp/schema_sql_only.sql
+
+          if ! diff -u /tmp/schema_sql_only.sql /tmp/schema_plus_migrations.sql; then
+            echo "::error::supabase/schema.sql does not yet reflect the migration(s) in this PR." \
+                 "Update schema.sql (fresh-install reference) so a database built from it alone" \
+                 "matches one built from schema.sql + these migrations. See the diff above."
+            exit 1
+          fi
+          echo "schema.sql already reflects this PR's migration(s) — no drift."

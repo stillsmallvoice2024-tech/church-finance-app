@@ -49,7 +49,8 @@
 ## Migration Strategy
 
 - **Automated runner (primary path)**: any `.sql` file added under `supabase/migrations/` (named `YYYYMMDDHHMMSS_description.sql`) is applied automatically —
-  - PR touching `supabase/migrations/**` → `.github/workflows/migrate-check.yml` boots a full local Supabase stack and applies every migration from scratch; a broken migration fails CI instead of failing prod
+  - PR touching `supabase/migrations/**` → `.github/workflows/migrate-check.yml` boots a local Supabase stack from `schema.sql`, applies only the PR's new/changed migration(s) on top (full-history replay isn't possible — no migration recreates the pre-migrations-folder base schema), then diffs that result against a second database built from `schema.sql` alone; a broken migration or a `schema.sql` left un-updated both fail CI instead of failing prod or drifting silently
+
   - Merge to `main` → `.github/workflows/migrate.yml` runs `supabase link` + `supabase db push` against the linked project, so the new migration reaches the DB with no manual SQL-editor step
   - Requires repo secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` (Settings → Secrets → Actions) and the `production` GitHub Environment to exist
   - Local equivalents: `npm run db:link`, `npm run db:push`, `npm run db:diff` (wraps the Supabase CLI via `npx`)

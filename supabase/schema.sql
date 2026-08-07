@@ -78,17 +78,18 @@ create table public.organizations (
   updated_at            timestamptz not null default now()
 );
 
-create unique index if not exists organizations_stripe_customer_id_key
-  on public.organizations (stripe_customer_id)
-  where stripe_customer_id is not null;
-create unique index if not exists organizations_stripe_subscription_id_key
-  on public.organizations (stripe_subscription_id)
-  where stripe_subscription_id is not null;
-
 create index if not exists idx_organizations_slug       on public.organizations(slug);
 create index if not exists idx_organizations_created_by on public.organizations(created_by);
 create index if not exists idx_organizations_status     on public.organizations(status);
 create index if not exists idx_organizations_purge_at   on public.organizations(purge_at);
+
+create unique index if not exists organizations_stripe_customer_id_key
+  on public.organizations (stripe_customer_id)
+  where stripe_customer_id is not null;
+
+create unique index if not exists organizations_stripe_subscription_id_key
+  on public.organizations (stripe_subscription_id)
+  where stripe_subscription_id is not null;
 
 -- Organisation names are globally unique, case- and whitespace-insensitive.
 -- Identically named orgs would disguise any cross-org leak as correct data.
@@ -153,11 +154,19 @@ returns boolean as $$
   );
 $$ language sql security definer stable;
 
--- Returns the id of the bootstrap 'primary' org.
--- Used as the DEFAULT for org_id on all business tables (fresh install only).
+-- DEFAULT stub for org_id on all business-table columns. The application layer
+-- (orgPayload() in useMutations.ts, explicit org_id in all other hooks) always
+-- supplies org_id on every INSERT, so this DEFAULT must never actually fire.
+-- Raising here turns any future regression that omits org_id into an immediate,
+-- loud DB error instead of a silent cross-tenant leak.
 create or replace function public.get_current_org_id()
-returns uuid language sql security definer stable as $$
-  select id from public.organizations where slug = 'primary' limit 1;
+returns uuid language plpgsql security definer as $$
+begin
+  raise exception
+    'get_current_org_id() invoked — all INSERT statements must supply org_id explicitly. '
+    'This function exists only as a DEFAULT stub; it must never be called at runtime. '
+    'Ensure the calling code reads org_id from useOrgStore and passes it in the INSERT payload.';
+end;
 $$;
 
 -- is_org_member: any active role in p_org_id — used by SELECT policies.
@@ -784,7 +793,7 @@ create table public.audit_log (
   record_id  uuid,
   old_data   jsonb,
   new_data   jsonb,
-  org_id     uuid        references public.organizations(id) on delete set null,
+  org_id     uuid        not null references public.organizations(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -797,7 +806,7 @@ create table public.field_changes (
   field_name text        not null,
   old_value  text,
   new_value  text,
-  org_id     uuid        references public.organizations(id) on delete set null,
+  org_id     uuid        not null references public.organizations(id) on delete set null,
   changed_at timestamptz default now()
 );
 
@@ -947,20 +956,12 @@ create table public.org_deletion_backups (
 
 -- ================================================================
 -- 7. SEED DATA
--- Bootstrap org must exist BEFORE any INSERT that relies on
--- get_current_org_id() returning a non-null value.
+-- No bootstrap organisation is seeded here. Every org is created by a user
+-- via the create_organization() RPC (Onboarding.tsx / LoginPage.tsx signup),
+-- which seeds that org's own default outflow type, category, and rule group
+-- through complete_org_onboarding(). A fresh install therefore starts with
+-- zero organisations.
 -- ================================================================
-
-insert into public.organizations (name, slug, metadata, onboarding_complete)
-values ('My Church', 'primary', '{"bootstrap": true}'::jsonb, true)
-on conflict (slug) do nothing;
-
--- Default outflow type per org (keyed on org_id + name).
-insert into public.outflow_types (org_id, name, color, is_system, is_locked)
-select id, 'General', '#64748b', true, true
-from   public.organizations
-where  slug = 'primary'
-on conflict (org_id, name) do update set is_system = true, is_locked = true;
 
 -- ================================================================
 -- 8. ENABLE ROW LEVEL SECURITY
@@ -1853,6 +1854,22 @@ create index if not exists idx_fx_bank_id         on public.fx_transactions(bank
 -- ================================================================
 -- 11. RPCS, SECURITY FUNCTIONS AND GRANTS
 -- ================================================================
+
+-- ── Username resolution ───────────────────────────────────────────────────────
+-- Lets username-based login (LoginPage.tsx) resolve a username to an email
+-- before calling supabase.auth.signInWithPassword, without exposing profiles
+-- rows to unauthenticated callers.
+create or replace function public.resolve_username(p_username text)
+returns text
+language sql security definer stable
+as $$
+  select email
+  from   public.profiles
+  where  username = lower(trim(p_username))
+  limit  1;
+$$;
+
+grant execute on function public.resolve_username(text) to anon;
 
 -- ── Invitation helpers ────────────────────────────────────────────────────────
 
@@ -2804,6 +2821,42 @@ begin
   end loop;
 end $$;
 
+-- ── Offset-chaining guard ─────────────────────────────────────────────────────
+-- An offset entry (offset_role = 'offset') must point directly at the root
+-- transaction it corrects, not at another offset — otherwise a chain of
+-- corrections could obscure which entry is actually authoritative.
+create or replace function public.prevent_offset_chaining()
+returns trigger language plpgsql as $$
+begin
+  if new.offset_role = 'offset' and new.root_transaction_id is not null then
+    if new.root_transaction_table = 'inflow_transactions' then
+      if exists (
+        select 1 from public.inflow_transactions
+        where id::text = new.root_transaction_id and offset_role = 'offset'
+      ) then
+        raise exception 'offset_chaining_not_allowed: root transaction is itself an offset';
+      end if;
+    elsif new.root_transaction_table = 'outflow_transactions' then
+      if exists (
+        select 1 from public.outflow_transactions
+        where id::text = new.root_transaction_id and offset_role = 'offset'
+      ) then
+        raise exception 'offset_chaining_not_allowed: root transaction is itself an offset';
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_prevent_inflow_offset_chaining
+  before insert or update on public.inflow_transactions
+  for each row execute function public.prevent_offset_chaining();
+
+create trigger trg_prevent_outflow_offset_chaining
+  before insert or update on public.outflow_transactions
+  for each row execute function public.prevent_offset_chaining();
+
 create or replace function public.request_org_deletion(
   p_org_id           uuid,
   p_org_name_confirm text
@@ -3043,9 +3096,14 @@ $$;
 
 -- purge_org is NOT granted to authenticated — service-role only.
 
--- ── Atomic FX Conversion (LB-2/E-C2) ─────────────────────────────────────────
+-- ── Atomic FX Conversion (LB-2/E-C2, H-3, H-4) ───────────────────────────────
 -- SECURITY INVOKER: RLS on all three tables enforced with the caller's identity.
 -- Postgres auto-rolls back all three inserts on any exception.
+-- H-3: naira_amount is computed server-side from fx_amount * exchange_rate;
+--      p_naira_amount is kept in the signature for caller compatibility only.
+-- H-4: rejects the conversion outright if the FX balance is insufficient.
+-- The advisory lock serializes concurrent conversions on the same org+currency
+-- so two simultaneous calls can't both read the same running_balance.
 create or replace function public.perform_fx_conversion(
   p_org_id               uuid,
   p_user_id              uuid,
@@ -3068,6 +3126,7 @@ as $$
 declare
   v_prev_balance  numeric(15,4);
   v_new_balance   numeric(15,4);
+  v_naira_amount  numeric(15,2);
   v_fx_tx_id      uuid;
   v_inflow_id     uuid;
   v_conversion_id uuid;
@@ -3079,6 +3138,8 @@ begin
   if p_fx_amount <= 0 then raise exception 'fx_amount must be positive'; end if;
   if p_exchange_rate <= 0 then raise exception 'exchange_rate must be positive'; end if;
 
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_fx_currency));
+
   select coalesce(running_balance, 0)
   into   v_prev_balance
   from   public.fx_transactions
@@ -3088,7 +3149,14 @@ begin
   limit  1;
 
   v_prev_balance := coalesce(v_prev_balance, 0);
+
+  if v_prev_balance < p_fx_amount then
+    raise exception 'Insufficient FX balance: available % but requested %',
+      v_prev_balance, p_fx_amount;
+  end if;
+
   v_new_balance  := v_prev_balance - p_fx_amount;
+  v_naira_amount := round(p_fx_amount * p_exchange_rate, 2);
 
   insert into public.fx_transactions (
     date, currency, withdrawal, deposit, running_balance,
@@ -3106,7 +3174,7 @@ begin
     fx_currency, fx_amount, fx_rate,
     transaction_type, created_by, org_id
   ) values (
-    p_date, p_naira_amount,
+    p_date, v_naira_amount,
     coalesce(p_notes, 'FX Conversion: ' || p_fx_currency || ' → ' || p_base_currency),
     p_bank_name, p_stage_code_1,
     coalesce(p_stage_code_2, 'Percentage Allocation'),
@@ -3120,7 +3188,7 @@ begin
     fx_withdrawal_id, naira_inflow_id, notes,
     allocation_config_id, is_partial, created_by, org_id
   ) values (
-    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, p_naira_amount,
+    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, v_naira_amount,
     v_fx_tx_id, v_inflow_id, p_notes,
     p_allocation_config_id, (p_fx_amount < v_prev_balance),
     p_user_id, p_org_id
@@ -3140,6 +3208,275 @@ $$;
 grant execute on function public.perform_fx_conversion(
   uuid, uuid, date, text, numeric, numeric, numeric, text, text, text, uuid, text, text
 ) to authenticated;
+
+-- ── create_fx_transaction — server-side manual FX ledger entry ──────────────
+-- Computes running_balance server-side under an advisory lock so two manual
+-- entries for the same org+currency can't race on the same prior balance.
+create or replace function public.create_fx_transaction(
+  p_org_id          uuid,
+  p_user_id         uuid,
+  p_date            date,
+  p_currency        text,
+  p_deposit         numeric,
+  p_withdrawal      numeric,
+  p_narration       text default null,
+  p_transaction_ref text default null,
+  p_bank_name       text default null,
+  p_bank_id         uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_prev_balance numeric := 0;
+  v_new_balance  numeric;
+  v_new_id       uuid;
+begin
+  if p_org_id is null then
+    raise exception 'org_id is required';
+  end if;
+  if coalesce(p_deposit, 0) < 0 or coalesce(p_withdrawal, 0) < 0 then
+    raise exception 'deposit and withdrawal must be non-negative';
+  end if;
+  if coalesce(p_deposit, 0) = 0 and coalesce(p_withdrawal, 0) = 0 then
+    raise exception 'Either deposit or withdrawal must be non-zero';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_currency));
+
+  select coalesce(running_balance, 0)
+  into   v_prev_balance
+  from   public.fx_transactions
+  where  org_id   = p_org_id
+    and  currency = p_currency
+  order  by date desc, created_at desc
+  limit  1;
+
+  v_prev_balance := coalesce(v_prev_balance, 0);
+  v_new_balance  := v_prev_balance + coalesce(p_deposit, 0) - coalesce(p_withdrawal, 0);
+
+  insert into public.fx_transactions (
+    date, currency, deposit, withdrawal, running_balance,
+    narration, transaction_ref, bank_name, bank_id, created_by, org_id
+  ) values (
+    p_date, p_currency,
+    coalesce(p_deposit, 0), coalesce(p_withdrawal, 0),
+    v_new_balance,
+    p_narration, p_transaction_ref, p_bank_name, p_bank_id,
+    p_user_id, p_org_id
+  )
+  returning id into v_new_id;
+
+  return v_new_id;
+end;
+$$;
+
+grant execute on function public.create_fx_transaction(
+  uuid, uuid, date, text, numeric, numeric, text, text, text, uuid
+) to authenticated;
+
+-- ── update_fx_transaction — edit a manual FX ledger entry ────────────────────
+-- Full recompute: after any edit, running_balance is recalculated for every
+-- row of this org+currency in ascending date/created_at order, so a changed
+-- date correctly cascades through every later row.
+create or replace function public.update_fx_transaction(
+  p_org_id          uuid,
+  p_user_id         uuid,
+  p_transaction_id  uuid,
+  p_date            date,
+  p_currency        text,
+  p_deposit         numeric,
+  p_withdrawal      numeric,
+  p_narration       text default null,
+  p_transaction_ref text default null,
+  p_bank_name       text default null,
+  p_bank_id         uuid default null
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_new_balance numeric;
+begin
+  if p_org_id is null then
+    raise exception 'org_id is required';
+  end if;
+  if coalesce(p_deposit, 0) < 0 or coalesce(p_withdrawal, 0) < 0 then
+    raise exception 'deposit and withdrawal must be non-negative';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_currency));
+
+  update public.fx_transactions
+  set
+    date            = p_date,
+    deposit         = coalesce(p_deposit, 0),
+    withdrawal      = coalesce(p_withdrawal, 0),
+    narration       = p_narration,
+    transaction_ref = p_transaction_ref,
+    bank_name       = p_bank_name,
+    bank_id         = p_bank_id
+  where id       = p_transaction_id
+    and org_id   = p_org_id
+    and currency = p_currency;
+
+  if not found then
+    raise exception 'FX transaction % not found or does not belong to this org', p_transaction_id;
+  end if;
+
+  with computed as (
+    select id,
+           sum(deposit - withdrawal) over (
+             partition by org_id, currency
+             order by date asc, created_at asc
+             rows between unbounded preceding and current row
+           ) as new_balance
+    from   public.fx_transactions
+    where  org_id   = p_org_id
+      and  currency = p_currency
+  )
+  update public.fx_transactions t
+  set    running_balance = c.new_balance
+  from   computed c
+  where  t.id = c.id;
+
+  select running_balance into v_new_balance
+  from   public.fx_transactions
+  where  id = p_transaction_id;
+
+  return v_new_balance;
+end;
+$$;
+
+grant execute on function public.update_fx_transaction(
+  uuid, uuid, uuid, date, text, numeric, numeric, text, text, text, uuid
+) to authenticated;
+
+-- ── update_fx_conversion — edit a conversion and cascade to its linked rows ──
+create or replace function public.update_fx_conversion(
+  p_conversion_id        uuid,
+  p_org_id               uuid,
+  p_user_id              uuid,
+  p_exchange_rate        numeric,
+  p_naira_amount         numeric,
+  p_notes                text,
+  p_allocation_config_id uuid,
+  p_stage_code_1         text,
+  p_stage_code_2         text,
+  p_bank_name            text
+)
+returns jsonb
+language plpgsql
+as $$
+declare v_conv record;
+begin
+  if not exists (
+    select 1 from public.org_members
+    where org_id = p_org_id and user_id = auth.uid()
+      and role in ('owner', 'admin') and status = 'active'
+  ) then
+    raise exception 'Only admins and owners can edit FX conversions';
+  end if;
+
+  select * into v_conv from public.fx_conversions where id = p_conversion_id and org_id = p_org_id;
+  if not found then raise exception 'FX conversion not found'; end if;
+
+  update public.fx_conversions set
+    exchange_rate = p_exchange_rate, naira_amount = p_naira_amount,
+    notes = p_notes, allocation_config_id = p_allocation_config_id
+  where id = p_conversion_id;
+
+  if v_conv.naira_inflow_id is not null then
+    update public.inflow_transactions set
+      amount = p_naira_amount, fx_rate = p_exchange_rate,
+      description = coalesce(p_notes, description),
+      allocation_config_id = p_allocation_config_id,
+      stage_code_1 = p_stage_code_1, stage_code_2 = p_stage_code_2,
+      bank_name = p_bank_name
+    where id = v_conv.naira_inflow_id;
+  end if;
+
+  if v_conv.fx_withdrawal_id is not null and p_notes is not null then
+    update public.fx_transactions set narration = p_notes where id = v_conv.fx_withdrawal_id;
+  end if;
+
+  return jsonb_build_object(
+    'conversion_id', p_conversion_id,
+    'inflow_id',     v_conv.naira_inflow_id,
+    'fx_tx_id',      v_conv.fx_withdrawal_id
+  );
+end;
+$$;
+
+grant execute on function public.update_fx_conversion(
+  uuid, uuid, uuid, numeric, numeric, text, uuid, text, text, text
+) to authenticated;
+
+-- ── revert_fx_conversion — undo a conversion and restore prior balances ──────
+create or replace function public.revert_fx_conversion(
+  p_conversion_id uuid,
+  p_org_id        uuid,
+  p_user_id       uuid
+)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_conv    record;
+  v_fx_date date;
+  v_fx_ts   timestamptz;
+  v_fx_amt  numeric;
+  v_ccy     text;
+begin
+  if not exists (
+    select 1 from public.org_members
+    where org_id = p_org_id and user_id = auth.uid()
+      and role in ('owner', 'admin') and status = 'active'
+  ) then
+    raise exception 'Only admins and owners can revert FX conversions';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(
+    (select fx_currency from public.fx_conversions where id = p_conversion_id and org_id = p_org_id)
+  ));
+
+  select * into v_conv from public.fx_conversions where id = p_conversion_id and org_id = p_org_id;
+  if not found then raise exception 'FX conversion not found'; end if;
+
+  v_ccy    := v_conv.fx_currency;
+  v_fx_amt := v_conv.fx_amount;
+
+  if v_conv.fx_withdrawal_id is not null then
+    select date, created_at into v_fx_date, v_fx_ts
+    from public.fx_transactions where id = v_conv.fx_withdrawal_id;
+
+    delete from public.fx_transactions where id = v_conv.fx_withdrawal_id;
+
+    update public.fx_transactions
+    set running_balance = running_balance + v_fx_amt
+    where org_id = p_org_id and currency = v_ccy
+      and (date > v_fx_date or (date = v_fx_date and created_at > v_fx_ts));
+  end if;
+
+  if v_conv.naira_inflow_id is not null then
+    delete from public.inflow_transactions where id = v_conv.naira_inflow_id;
+  end if;
+
+  delete from public.fx_conversions where id = p_conversion_id;
+
+  return jsonb_build_object(
+    'reverted_conversion_id', p_conversion_id,
+    'fx_tx_deleted',          v_conv.fx_withdrawal_id,
+    'inflow_deleted',         v_conv.naira_inflow_id
+  );
+end;
+$$;
+
+grant execute on function public.revert_fx_conversion(uuid, uuid, uuid) to authenticated;
 
 -- ── user_preferences updated_at trigger ──────────────────────────────────────
 
