@@ -20,6 +20,18 @@ const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')
  */
 const UPSTREAM_TIMEOUT_MS = 55_000
 
+/**
+ * Hard ceiling on the base64 image field, before any model call.
+ *
+ * Each call is a billed request at up to 8,000 tokens, so an uncapped
+ * payload is an uncapped bill. 8 MB of base64 is ~6 MB of PNG — far above
+ * anything renderPageToBase64 produces for a statement page at the model's
+ * resolution cap, and below Anthropic's own 5 MB-per-image decode limit
+ * closely enough that oversized input fails here, cheaply, rather than
+ * upstream after the request has been paid for.
+ */
+const MAX_IMAGE_B64_BYTES = 8 * 1024 * 1024
+
 // Browser calls via supabase.functions.invoke send a CORS preflight (OPTIONS)
 // because of the custom Authorization/Content-Type headers. Without these
 // headers on every response, the preflight fails and the browser never gets
@@ -187,17 +199,68 @@ Deno.serve(async (req) => {
   }
 
   // ── Parse body ───────────────────────────────────────────────────────────
-  let body: { image?: string; mimeType?: string; pageNumber?: number }
+  let body: { image?: string; mimeType?: string; pageNumber?: number; orgId?: string }
   try { body = await req.json() } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Invalid JSON body' }), {
       status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 
-  const { image, mimeType = 'image/png', pageNumber = 1 } = body
+  const { image, mimeType = 'image/png', pageNumber = 1, orgId } = body
   if (!image) {
     return new Response(JSON.stringify({ ok: false, error: 'image is required' }), {
       status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
+  }
+  if (!orgId) {
+    return new Response(JSON.stringify({ ok: false, error: 'orgId is required' }), {
+      status: 400, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    })
+  }
+
+  // ── Size cap ──────────────────────────────────────────────────────────────
+  // Before authorisation, because it costs nothing and a malformed client is
+  // more likely than a hostile one.
+  if (image.length > MAX_IMAGE_B64_BYTES) {
+    return new Response(JSON.stringify({
+      ok: false, pageNumber,
+      error: `Page image is too large (${Math.round(image.length / 1024 / 1024)} MB). ` +
+             'Reduce the page image size and retry.',
+    }), { status: 413, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+  }
+
+  // ── Authorise and meter ───────────────────────────────────────────────────
+  // orgId comes from the client but is never trusted: consume_ocr_page
+  // re-checks membership, role and plan against p_user_id server-side, then
+  // increments the org's daily page count under a row lock. It is the only
+  // thing standing between a valid JWT and a billed model call, so a failure
+  // to reach it must deny — never fall through to the extraction below.
+  const { data: verdict, error: quotaErr } = await service.rpc('consume_ocr_page', {
+    p_org_id:  orgId,
+    p_user_id: user.id,
+    p_pages:   1,
+  })
+
+  if (quotaErr) {
+    console.error(`[pdf-ocr] quota check failed for org ${orgId}:`, quotaErr.message)
+    return new Response(JSON.stringify({
+      ok: false, pageNumber, error: 'Could not verify OCR entitlement. Please retry.',
+    }), { status: 503, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
+  }
+
+  if (!verdict?.allowed) {
+    const reason = verdict?.reason ?? 'not_authorised'
+    const message =
+      reason === 'daily_quota_exceeded'
+        ? `Daily OCR limit reached (${verdict.used}/${verdict.limit} pages). Try again tomorrow.`
+      : reason === 'plan_too_low'
+        ? 'OCR import of scanned PDFs is available on the Clariva Impact plan.'
+      : reason === 'role_not_permitted'
+        ? 'Your role cannot import transactions.'
+        : 'You do not have access to OCR for this organisation.'
+
+    return new Response(JSON.stringify({ ok: false, pageNumber, error: message, reason }), {
+      status: 403, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     })
   }
 

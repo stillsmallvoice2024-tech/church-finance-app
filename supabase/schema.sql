@@ -67,6 +67,9 @@ create table public.organizations (
   plan_expires_at       timestamptz,
   imported_rows_count   int         not null default 0,
   imported_rows_period_start timestamptz not null default now(),
+  -- Max OCR pages per UTC day (20260807000002_ocr_quota). Enforced by
+  -- consume_ocr_page(); raise per-org via the service role if needed.
+  ocr_daily_page_limit  int         not null default 300,
   -- Stripe linkage (20260806000000_stripe_billing). Written only by the
   -- billing edge functions under the service role — see Section 12.
   stripe_customer_id     text,
@@ -277,6 +280,97 @@ begin
   return v_new_count;
 end;
 $$;
+
+-- ── OCR spend control (20260807000002_ocr_quota) ─────────────────────────────
+-- The pdf-ocr Edge Function turns one request into one billed model call, so
+-- it must not be reachable on a valid JWT alone. consume_ocr_page() is the
+-- single authorising gate it calls before spending anything: membership, role
+-- and plan are checked server-side, then the org's daily page count is
+-- incremented under the upserted row's lock so concurrent pages cannot race
+-- past the cap. Service role only — granting it to authenticated would let any
+-- user burn their own org's allowance directly.
+create table if not exists public.ocr_usage (
+  org_id     uuid        not null references public.organizations(id) on delete cascade,
+  usage_date date        not null default (now() at time zone 'utc')::date,
+  pages      int         not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (org_id, usage_date)
+);
+
+create index if not exists idx_ocr_usage_date on public.ocr_usage(usage_date);
+
+-- RLS on with zero policies: denies anon and authenticated outright. The
+-- service role bypasses RLS; orgs see their usage via the RPC's return value.
+alter table public.ocr_usage enable row level security;
+revoke all on public.ocr_usage from anon, authenticated;
+
+create or replace function public.consume_ocr_page(
+  p_org_id  uuid,
+  p_user_id uuid,
+  p_pages   int default 1
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role  text;
+  v_limit int;
+  v_used  int;
+  v_want  int := greatest(coalesce(p_pages, 1), 1);
+begin
+  -- p_user_id is passed explicitly: the caller holds the service role, so
+  -- auth.uid() is null and the is_org_*() helpers cannot be reused here.
+  select role into v_role
+  from public.org_members
+  where org_id = p_org_id
+    and user_id = p_user_id
+    and status  = 'active';
+
+  if v_role is null then
+    return jsonb_build_object('allowed', false, 'reason', 'not_a_member');
+  end if;
+
+  if v_role not in ('owner', 'admin', 'accountant') then
+    return jsonb_build_object('allowed', false, 'reason', 'role_not_permitted');
+  end if;
+
+  if not public.org_plan_at_least(p_org_id, 'full') then
+    return jsonb_build_object('allowed', false, 'reason', 'plan_too_low');
+  end if;
+
+  select ocr_daily_page_limit into v_limit
+  from public.organizations
+  where id = p_org_id;
+
+  insert into public.ocr_usage (org_id, usage_date, pages)
+  values (p_org_id, (now() at time zone 'utc')::date, 0)
+  on conflict (org_id, usage_date)
+    do update set pages = public.ocr_usage.pages
+  returning pages into v_used;
+
+  if v_used + v_want > v_limit then
+    return jsonb_build_object(
+      'allowed', false, 'reason', 'daily_quota_exceeded',
+      'used', v_used, 'limit', v_limit
+    );
+  end if;
+
+  -- Incremented only once all three gates pass, so a refusal costs the org
+  -- nothing from its own allowance.
+  update public.ocr_usage
+  set pages = pages + v_want, updated_at = now()
+  where org_id = p_org_id
+    and usage_date = (now() at time zone 'utc')::date
+  returning pages into v_used;
+
+  return jsonb_build_object('allowed', true, 'used', v_used, 'limit', v_limit);
+end;
+$$;
+
+revoke all on function public.consume_ocr_page(uuid, uuid, int) from public, anon, authenticated;
+grant execute on function public.consume_ocr_page(uuid, uuid, int) to service_role;
 
 -- is_admin: owner or admin in ANY active org — used by tables without org_id.
 create or replace function public.is_admin()
@@ -1175,7 +1269,8 @@ declare
     'stripe_customer_id',
     'stripe_subscription_id',
     'imported_rows_count',
-    'imported_rows_period_start'
+    'imported_rows_period_start',
+    'ocr_daily_page_limit'
   ];
 begin
   for v_col in
@@ -1208,6 +1303,7 @@ begin
   or new.stripe_subscription_id     is distinct from old.stripe_subscription_id
   or new.imported_rows_count        is distinct from old.imported_rows_count
   or new.imported_rows_period_start is distinct from old.imported_rows_period_start
+  or new.ocr_daily_page_limit       is distinct from old.ocr_daily_page_limit
   then
     raise exception
       'Billing and usage fields on organizations can only be changed by the billing system'
