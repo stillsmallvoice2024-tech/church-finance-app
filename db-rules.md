@@ -233,6 +233,7 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 - Only the service role writes plan columns (`stripe-webhook`, `create-checkout-session`, `create-portal-session` all use `SUPABASE_SERVICE_ROLE_KEY`). `increment_import_count()` is the one user-triggered exception — it sets the transaction-local `app.plan_guard_bypass`.
 - Client mirror in `src/hooks/usePlan.ts` (`FEATURE_TIERS`, `QUANTITY_LIMITS`, `TXN_TYPE_FEATURE`). Change one, change the other; `planEnforcement.test.ts` asserts they agree.
 - `resolveEffectiveTier(null)` → `'free'` (fails closed). Consumers must branch on `planLoading` and render a neutral placeholder — `hasFeature()` is false while the tier is unknown, so any gate/route-guard/cap that skips the check will flash an upsell (or redirect) at paying orgs.
+- **Manual plan override (payment received outside Stripe):** `scripts/set-org-plan.mjs` — `node --env-file=.env.local scripts/set-org-plan.mjs --find "<name>"` then `--org <slug> --tier level1|full|free --months <n>` (or `--expires YYYY-MM-DD`). Uses the service role key, the same door the Stripe webhook uses — it's the intended way through the guard trigger, not a workaround. Refuses to touch an org with a live `stripe_subscription_id` unless `--force`d, to avoid drifting out of sync with a webhook that will overwrite it. Requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` (never commit it).
 
 ---
 
