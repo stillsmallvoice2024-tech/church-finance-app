@@ -66,17 +66,22 @@ export async function fetchExistingTransactionIds(
 export async function fetchExistingRowCounts(
   table: 'inflow_transactions' | 'outflow_transactions' | 'fx_transactions',
   refColumn: 'transaction_ref' | 'transaction_id',
-  amountColumn: 'amount' | 'amount_disbursed',
+  amountColumn: 'amount' | 'amount_disbursed' | 'deposit',
   descColumn: 'description' | 'narration',
   ids: string[],
   bankName: string | null,
   orgId: string,
+  // fx_transactions splits its amount across deposit and withdrawal. Pass
+  // 'withdrawal' here so the fingerprint matches the one the import builds,
+  // which uses whichever of the two is non-zero.
+  amountColumn2?: 'withdrawal',
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>()
   const unique = [...new Set(ids)].filter(Boolean)
   if (unique.length === 0) return counts
 
-  const cols = `${refColumn}, date, ${amountColumn}, ${descColumn}`
+  const cols = [refColumn, 'date', amountColumn, amountColumn2, descColumn]
+    .filter(Boolean).join(', ')
   const results = await mapWithConcurrency(chunkIds(unique), DEDUP_QUERY_CONCURRENCY, chunk => {
     const base = supabase.from(table).select(cols).eq('org_id', orgId).in(refColumn, chunk)
     return bankName ? base.eq('bank_name', bankName) : base
@@ -85,10 +90,12 @@ export async function fetchExistingRowCounts(
   for (const { data, error } of results) {
     if (error) throw error
     for (const row of (data ?? []) as unknown as Record<string, unknown>[]) {
+      const amount = Number(row[amountColumn] ?? 0)
+        || Number(amountColumn2 ? row[amountColumn2] ?? 0 : 0)
       const fp = rowFingerprint(
         String(row[refColumn] ?? ''),
         String(row.date ?? ''),
-        Number(row[amountColumn] ?? 0),
+        amount,
         (row[descColumn] as string | null) ?? '',
       )
       counts.set(fp, (counts.get(fp) ?? 0) + 1)

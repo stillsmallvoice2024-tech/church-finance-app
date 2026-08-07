@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { Sparkles, ExternalLink, Info } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
+import { countIdenticalManualEntries } from '../../utils/manualEntryDuplicate'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
@@ -105,6 +106,10 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
   const [selectedConfigId,  setSelectedConfigId]  = useState('')
   const [configManuallySet, setConfigManuallySet] = useState(false)
   const [dupError, setDupError] = useState<string | null>(null)
+  // Set when an identical entry already exists. The save is held so the user can
+  // say whether this really is a second one — see confirmDuplicate below.
+  const [pendingDup, setPendingDup] = useState<{ count: number } | null>(null)
+  const confirmedDupRef = useRef(false)
   const [rootTxnLink,     setRootTxnLink]     = useState<RootTxnLink | null>(null)
   const [rootPropagated,  setRootPropagated]  = useState(false)
 
@@ -272,6 +277,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
 
   const onSubmit = async (values: FormValues) => {
     setDupError(null)
+    setPendingDup(null)
     try {
       if (isEdit && editRecord) {
         await update({
@@ -306,13 +312,33 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
       } else {
         const txnRef = values.transaction_ref?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount), values.description ?? '', values.bank_name ?? '')
-        let dupQ = supabase.from('inflow_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', txnRef)
-        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
-        const { data: dup } = await dupQ.limit(1)
-        if (dup && dup.length > 0) {
-          setDupError('Duplicate: an inflow with this transaction ref already exists for the selected bank.')
+
+        // How many identical inflows are already recorded — same ref, date,
+        // amount, description and bank. Leaving the ref blank hashes those four
+        // into it, so two separate gifts of the same amount on the same day
+        // land on one ref. This used to be refused outright, which made the
+        // second gift impossible to record. Nothing on this form can tell them
+        // apart, so ask rather than reject, and store the confirmed one at the
+        // next occurrence so it coexists instead of colliding.
+        // Without an org the check would read across every org the user belongs
+        // to and refuse an entry because some other org holds a matching row.
+        if (!orgId) {
+          setDupError('No active organisation — please reload and try again.')
           return
         }
+        const identical = await countIdenticalManualEntries({
+          table: 'inflow_transactions', refColumn: 'transaction_ref',
+          amountColumn: 'amount', descColumn: 'description',
+          orgId, bankName: values.bank_name || null,
+          ref: txnRef, date: values.date, amount: values.amount,
+          description: values.description ?? null,
+        })
+        if (identical > 0 && !confirmedDupRef.current) {
+          setPendingDup({ count: identical })
+          return
+        }
+        const refOccurrence = confirmedDupRef.current ? identical : 0
+        confirmedDupRef.current = false
         const input: AddInflowInput = {
           date:                       values.date,
           amount:                     values.amount,
@@ -323,6 +349,7 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
           stage_code_1:               values.stage_code_1 || undefined,
           stage_code_2:               values.stage_code_2 || undefined,
           transaction_ref:            txnRef,
+          ref_occurrence:             refOccurrence,
           specific_seed_description:  values.specific_seed_description || undefined,
           remark:                     values.remark || undefined,
           transaction_type:           values.transaction_type        || undefined,
@@ -403,6 +430,38 @@ export function AddInflowModal({ open, onClose, onSuccess, editRecord }: Props) 
         {dupError && (
           <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
             {dupError}
+          </div>
+        )}
+
+        {pendingDup && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 px-4 py-3 space-y-2">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              You already have {pendingDup.count === 1 ? 'an inflow' : `${pendingDup.count} inflows`} recorded
+              with this same date, amount and description
+              {watch('bank_name') ? ` for ${watch('bank_name')}` : ''}. Is this a genuinely
+              separate one — a second gift of the same amount — or did the first save already go through?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  confirmedDupRef.current = true
+                  setPendingDup(null)
+                  void handleSubmit(onSubmit)()
+                }}
+                className="px-3 min-h-[36px] text-xs text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60"
+              >
+                Yes, record it as a separate inflow
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDup(null)}
+                className="px-3 min-h-[36px] text-xs text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 

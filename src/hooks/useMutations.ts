@@ -107,6 +107,13 @@ async function batchLogFieldChanges(_rows: Array<{
 export interface AddInflowInput {
   date: string
   amount: number
+  /**
+   * Position among otherwise-identical rows (0 = first). Manual entry derives
+   * the reference by hashing date + amount + description + bank when the field
+   * is left blank, so two genuinely separate gifts of the same amount on the
+   * same day hash alike; this is what lets the second one be recorded.
+   */
+  ref_occurrence?: number
   description?: string
   allocation_config_id?: string
   stage_code_1?: string
@@ -133,6 +140,8 @@ export interface AddInflowInput {
 export interface AddOutflowInput {
   date: string
   amount_disbursed: number
+  /** See AddInflowInput.ref_occurrence. */
+  ref_occurrence?: number
   is_pending_deduction?: boolean
   description?: string
   allocation_config_id?: string
@@ -779,6 +788,8 @@ export function useUpdateCategoryGroup(): MutationHook<{ id: string; name: strin
 export interface AddFXTransactionInput {
   date: string
   currency: string
+  /** See AddInflowInput.ref_occurrence. */
+  ref_occurrence?: number
   deposit?: number
   withdrawal?: number
   narration?: string
@@ -808,6 +819,7 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
         p_transaction_ref: normalizeId(input.transaction_ref ?? '') || null,
         p_bank_name:       input.bank_name       ?? null,
         p_bank_id:         input.bank_id         ?? null,
+        p_ref_occurrence:  input.ref_occurrence   ?? 0,
       })
       if (err) throw err
       if (!data) throw new Error('No ID returned.')

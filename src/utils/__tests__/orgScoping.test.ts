@@ -185,6 +185,30 @@ describe('import duplicate checks are org-scoped', () => {
     expect(code).toContain(".eq('org_id', orgId)")
   })
 
+  // AddOutflowModal's duplicate check ran without an org filter, so an outflow
+  // in ANY org the user belonged to blocked a legitimate entry here. All three
+  // manual modals now go through countIdenticalManualEntries, which requires an
+  // orgId, and each guards against a null active org before calling it.
+  it('manual entry duplicate checks are org-scoped', () => {
+    for (const f of [
+      'components/modals/AddInflowModal.tsx',
+      'components/modals/AddOutflowModal.tsx',
+      'components/modals/AddFXModal.tsx',
+    ]) {
+      const code = src(f)
+      expect(code, `${f} should use the shared identity check`).toContain('countIdenticalManualEntries')
+      expect(code, `${f} should guard a null org`).toMatch(/if \(!orgId\)/)
+      // The old ref-only pre-check must be gone: it rejected a genuine second
+      // entry outright instead of asking.
+      expect(code, `${f} should not reject on reference alone`).not.toMatch(/setDupError\('Duplicate:/)
+    }
+  })
+
+  it('countIdenticalManualEntries requires an orgId and filters on it', () => {
+    expect(src('utils/manualEntryDuplicate.ts')).toContain('orgId:        string')
+    expect(src('utils/dedupQuery.ts')).toContain(".eq('org_id', orgId)")
+  })
+
   it('all callers pass an orgId', () => {
     for (const f of ['components/modals/ImportModal.tsx', 'pages/Import.tsx']) {
       const code = src(f)
@@ -198,15 +222,18 @@ describe('import duplicate checks are org-scoped', () => {
     }
   })
 
-  it('single-record duplicate checks are org-scoped', () => {
+  // The inline `supabase.from(<table>).select('id')` duplicate checks these
+  // modals used are gone — they matched on the reference alone and rejected a
+  // genuine second entry outright. The org-scoping invariant they guarded is
+  // now covered by 'manual entry duplicate checks are org-scoped' above, which
+  // also asserts none of them come back.
+  it('no modal reintroduces an inline single-record duplicate check', () => {
     for (const [f, table] of [
-      ['components/modals/AddFXModal.tsx',   'fx_transactions'],
+      ['components/modals/AddFXModal.tsx',     'fx_transactions'],
       ['components/modals/AddInflowModal.tsx', 'inflow_transactions'],
+      ['components/modals/AddOutflowModal.tsx','outflow_transactions'],
     ] as const) {
-      const code = src(f)
-      const idx = code.indexOf(`supabase.from('${table}').select('id')`)
-      expect(idx).toBeGreaterThanOrEqual(0)
-      expect(code.slice(idx, idx + 160)).toContain(".eq('org_id', orgId)")
+      expect(src(f)).not.toContain(`supabase.from('${table}').select('id')`)
     }
   })
 })
