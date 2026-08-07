@@ -219,6 +219,24 @@ Hooks confirmed compliant: `useUpdateTransaction`, `useUpdateFXTransaction`, `us
 
 ---
 
+## Plan (Subscription Tier) Enforcement
+
+`20260807000000_plan_enforcement.sql`; mirrored in `schema.sql` §9 + §12. Tiers: `free` (Start) / `level1` (Growth) / `full` (Impact).
+
+**The database is the enforcer. React gates are presentation only.** Before this migration every gate was a `<div>`, `org_plan_at_least()` had zero call sites, and `resolveEffectiveTier(null)` failed open to `full` — deleting a DOM node or a failed org lookup granted Impact.
+
+- **Enforce on CREATE, never on READ/EDIT/DELETE.** A downgraded org keeps full read/edit/delete on everything created at a higher tier and simply cannot create more. All plan checks are INSERT-only, or (triggers) fire only when the gated value is actually introduced. Never add a plan check to an UPDATE `USING`/`WITH CHECK` — `WITH CHECK` can't see `OLD`, so it re-evaluates the existing row and traps data.
+- Predicates: `org_plan_at_least(org_id, tier)`, `org_effective_plan_tier(org_id)` (lazy expiry → `free`), `org_can_add_bank()`, `org_can_add_custom_rule()`, `org_plan_allows_txn_type()`. The quantity ones live before §9 because they count rows in Section 6 tables.
+- Gated INSERT policies — `level1`: `fx_transactions`, `fx_conversions`, `receipts`, `bank_statement_balances`, `invitations`, `report_templates`; `full`: `bank_deposits`, `intrabank_transfers`, `dynamic_reports`. `special_config_groups` uses the quantity predicate (Start 0 / Growth 2 / Impact ∞).
+- Triggers (what RLS can't express): `trg_bank_plan_limits` (1-bank cap on Start, 1-foreign-currency cap on Growth), `trg_inflow/outflow_txn_type_plan` (`refund`/`reversal`/`bank_deposit`/`intrabank_transfer` require `full`).
+- **Plan/billing columns are locked** by `trg_guard_org_plan_columns`. `orgs_update` is `using (is_org_admin(id))` with no `WITH CHECK`, so in Postgres the USING doubles as the check — an admin could set their own `plan_tier`. The guard blocks the 9 plan/stripe/import columns for anyone but the service role. Compares via `to_jsonb(new/old)`, not `new.<col>` — a direct reference to a column an unmigrated DB lacks raises `record new has no field ...` and takes down *every* organizations UPDATE.
+- Only the service role writes plan columns (`stripe-webhook`, `create-checkout-session`, `create-portal-session` all use `SUPABASE_SERVICE_ROLE_KEY`). `increment_import_count()` is the one user-triggered exception — it sets the transaction-local `app.plan_guard_bypass`.
+- Client mirror in `src/hooks/usePlan.ts` (`FEATURE_TIERS`, `QUANTITY_LIMITS`, `TXN_TYPE_FEATURE`). Change one, change the other; `planEnforcement.test.ts` asserts they agree.
+- `resolveEffectiveTier(null)` → `'free'` (fails closed). Consumers must branch on `planLoading` and render a neutral placeholder — `hasFeature()` is false while the tier is unknown, so any gate/route-guard/cap that skips the check will flash an upsell (or redirect) at paying orgs.
+- **Manual plan override (payment received outside Stripe):** `scripts/set-org-plan.mjs` — `node --env-file=.env.local scripts/set-org-plan.mjs --find "<name>"` then `--org <slug> --tier level1|full|free --months <n>` (or `--expires YYYY-MM-DD`). Uses the service role key, the same door the Stripe webhook uses — it's the intended way through the guard trigger, not a workaround. Refuses to touch an org with a live `stripe_subscription_id` unless `--force`d, to avoid drifting out of sync with a webhook that will overwrite it. Requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` (never commit it).
+
+---
+
 ## Special Config Versioning
 
 `special_config_groups` is the parent record. Each group can have multiple `allocation_configs` rows (versions), identified by `config_group_id`.

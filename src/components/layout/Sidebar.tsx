@@ -137,7 +137,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { isAdmin, canWrite } = useRole()
-  const { hasFeature } = usePlan()
+  const { hasFeature, planLoading } = usePlan()
   const showAdmin = isAdmin()
   const showWrite = canWrite()
   const activeYear = useAccountingYearStore(s => s.year)
@@ -235,7 +235,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 >
                   <div className="space-y-0.5 pb-1">
                     {visibleItems.map(({ label, path, icon: Icon, planFeature }) => {
-                      const locked = planFeature ? !hasFeature(planFeature) : false
+                      // hasFeature() fails closed, so suppress the padlock
+                      // until the tier is known — otherwise every gated nav
+                      // item flashes locked on load for paying orgs.
+                      const locked = planFeature && !planLoading ? !hasFeature(planFeature) : false
                       return (
                         <NavLink
                           key={path}
