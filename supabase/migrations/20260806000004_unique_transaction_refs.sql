@@ -24,25 +24,40 @@
 -- ── 1. Pre-flight: refuse to run on data that already has duplicates ─────────
 -- Creating the index would fail with an opaque "could not create unique index"
 -- and no indication of which rows are at fault.  Fail early instead, and point
--- at the report view added in the previous migration.  Duplicates are financial
--- records — they are never deleted automatically; a human decides.
+-- at the report view added in the previous migration.
+--
+-- A repeated reference does NOT imply a duplicated transaction.  Banks reuse
+-- one reference across several genuine postings — a Session ID spanning the
+-- legs of a settlement, which ImportModal maps into this column ('sessionid' is
+-- an alias for the reference field).  Deleting those would destroy real income.
+-- So the hint leads with the report's `likely_cause` column and with the
+-- non-destructive resolver; deletion is named only for the case that warrants
+-- it, and is always the user's decision.
 
 DO $$
 DECLARE
-  v_groups bigint;
-  v_rows   bigint;
+  v_groups   bigint;
+  v_rows     bigint;
+  v_shared   bigint;
+  v_repeated bigint;
 BEGIN
-  SELECT count(*), coalesce(sum(row_count), 0)
-  INTO   v_groups, v_rows
+  SELECT count(*),
+         coalesce(sum(row_count), 0),
+         count(*) FILTER (WHERE likely_cause = 'shared reference'),
+         count(*) FILTER (WHERE likely_cause = 'repeated import')
+  INTO   v_groups, v_rows, v_shared, v_repeated
   FROM   public.duplicate_transaction_refs;
 
   IF v_groups > 0 THEN
     RAISE EXCEPTION
-      'Cannot enforce transaction-reference uniqueness: % duplicate reference group(s) covering % row(s) already exist.',
-      v_groups, v_rows
+      'Cannot enforce transaction-reference uniqueness: % reference group(s) covering % row(s) are not unique (% look like distinct transactions sharing a reference, % look like a repeated import).',
+      v_groups, v_rows, v_shared, v_repeated
       USING HINT =
-        'Inspect them with: SELECT * FROM public.duplicate_transaction_refs ORDER BY row_count DESC; '
-        'Delete the surplus rows (row_ids lists each group oldest-first), then re-run this migration.';
+        'Inspect first: SELECT * FROM public.duplicate_transaction_refs ORDER BY row_count DESC; '
+        'For likely_cause = ''shared reference'' the rows are all real — run '
+        'SELECT * FROM public.suffix_duplicate_transaction_refs(); to number them apart. Do not delete them. '
+        'For likely_cause = ''repeated import'' the rows are the same transaction recorded twice — review '
+        'row_ids (oldest first) and delete the surplus by hand. Then re-run this migration.';
   END IF;
 END $$;
 
