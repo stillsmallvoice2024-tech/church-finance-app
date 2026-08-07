@@ -1073,7 +1073,8 @@ $$;
 -- ── profiles (no org_id — global user registry) ───────────────────────────────
 
 -- Restricted to own row or a user who shares an active org (no cross-org PII).
--- Username login resolves via resolve_username() SECURITY DEFINER RPC, not this.
+-- Username login resolves inside the `username-auth` Edge Function (service
+-- role), not through this policy and not through any anon-callable RPC.
 create policy "profiles_select" on public.profiles
   for select using (
     id = auth.uid()
@@ -1931,21 +1932,77 @@ create index if not exists idx_fx_bank_id         on public.fx_transactions(bank
 -- 11. RPCS, SECURITY FUNCTIONS AND GRANTS
 -- ================================================================
 
--- ── Username resolution ───────────────────────────────────────────────────────
--- Lets username-based login (LoginPage.tsx) resolve a username to an email
--- before calling supabase.auth.signInWithPassword, without exposing profiles
--- rows to unauthenticated callers.
-create or replace function public.resolve_username(p_username text)
-returns text
-language sql security definer stable
+-- ── Username login rate limiting ──────────────────────────────────────────────
+-- Username → email resolution deliberately has NO database entry point. An
+-- earlier resolve_username() RPC granted to `anon` let any unauthenticated
+-- caller convert guessed usernames into real email addresses — a harvesting
+-- oracle aimed straight at finance administrators. It was dropped in
+-- 20260807000001_remove_resolve_username_rpc.sql.
+--
+-- Username login now runs inside the `username-auth` Edge Function, which
+-- resolves the username with the service role and hands back a session,
+-- never an email address. These two objects are its rate limiter.
+
+create table if not exists public.auth_attempts (
+  id            bigserial   primary key,
+  ip_hash       text        not null,
+  username_hash text        not null,
+  attempted_at  timestamptz not null default now()
+);
+
+create index if not exists auth_attempts_ip_idx
+  on public.auth_attempts (ip_hash, attempted_at desc);
+create index if not exists auth_attempts_username_idx
+  on public.auth_attempts (username_hash, attempted_at desc);
+create index if not exists auth_attempts_attempted_at_idx
+  on public.auth_attempts (attempted_at);
+
+-- RLS on with no policies: only the service role (BYPASSRLS) can read or write.
+alter table public.auth_attempts enable row level security;
+revoke all on public.auth_attempts from anon, authenticated;
+revoke all on sequence public.auth_attempts_id_seq from anon, authenticated;
+
+-- Records the attempt and reports whether the caller is still under the caps:
+-- 10/minute and 60/hour per IP, 20/hour per username.
+create or replace function public.check_auth_rate_limit(
+  p_ip_hash       text,
+  p_username_hash text
+)
+returns boolean
+language plpgsql security definer
+set search_path = public, pg_temp
 as $$
-  select email
-  from   public.profiles
-  where  username = lower(trim(p_username))
-  limit  1;
+declare
+  v_ip_minute int;
+  v_ip_hour   int;
+  v_user_hour int;
+begin
+  if random() < 0.01 then
+    delete from public.auth_attempts
+    where  attempted_at < now() - interval '24 hours';
+  end if;
+
+  select count(*) into v_ip_minute
+  from   public.auth_attempts
+  where  ip_hash = p_ip_hash and attempted_at > now() - interval '1 minute';
+
+  select count(*) into v_ip_hour
+  from   public.auth_attempts
+  where  ip_hash = p_ip_hash and attempted_at > now() - interval '1 hour';
+
+  select count(*) into v_user_hour
+  from   public.auth_attempts
+  where  username_hash = p_username_hash and attempted_at > now() - interval '1 hour';
+
+  insert into public.auth_attempts (ip_hash, username_hash)
+  values (p_ip_hash, p_username_hash);
+
+  return v_ip_minute < 10 and v_ip_hour < 60 and v_user_hour < 20;
+end;
 $$;
 
-grant execute on function public.resolve_username(text) to anon;
+revoke all on function public.check_auth_rate_limit(text, text) from public, anon, authenticated;
+grant execute on function public.check_auth_rate_limit(text, text) to service_role;
 
 -- ── Invitation helpers ────────────────────────────────────────────────────────
 

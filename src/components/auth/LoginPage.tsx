@@ -18,6 +18,15 @@ function AppIcon() {
   )
 }
 
+/** Response shape of the `username-auth` Edge Function. */
+interface AuthFnResult {
+  ok:             boolean
+  code?:          'invalid_credentials' | 'email_not_confirmed' | 'rate_limited'
+                | 'server_error' | 'invalid_request'
+  access_token?:  string
+  refresh_token?: string
+}
+
 const inputCls =
   'w-full px-3 py-2.5 min-h-[44px] text-base sm:text-sm border border-gray-300 rounded-lg outline-none ' +
   'focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors'
@@ -45,52 +54,76 @@ export default function LoginPage() {
   const [showSignupConf, setShowSignupConf] = useState(false)
   const [signupPending,  setSignupPending]  = useState(false)
 
-  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null)
-  const [resendSent,       setResendSent]       = useState(false)
-  const [resendLoading,    setResendLoading]     = useState(false)
+  const [unconfirmed,   setUnconfirmed]   = useState(false)
+  const [resendSent,    setResendSent]    = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated && !mfaRequired) navigate('/', { replace: true })
   }, [isAuthenticated, mfaRequired, navigate])
 
-  const resolveEmail = async (input: string): Promise<string | null> => {
-    if (input.includes('@')) return input
-    // Direct table query is blocked by RLS for unauthenticated users, so we
-    // use a SECURITY DEFINER RPC that can bypass RLS safely.
-    const { data, error } = await supabase
-      .rpc('resolve_username', { p_username: input.trim().toLowerCase() })
-    if (error) {
-      console.error('[login] username lookup error:', error)
-      setError('Sign-in error — please try again using your email address.')
+  /**
+   * All pre-authentication work happens in the `username-auth` Edge Function.
+   * The browser never asks the database "which email owns this username?" —
+   * that question, answerable by anyone holding the public anon key, was an
+   * email-harvesting oracle. We send credentials and get back a session.
+   */
+  const callAuthFn = async (payload: Record<string, unknown>): Promise<AuthFnResult | null> => {
+    const { data, error } = await supabase.functions.invoke<AuthFnResult>('username-auth', {
+      body: payload,
+    })
+    if (error || !data) {
+      console.error('[login] username-auth failed:', error)
       return null
     }
-    return (data as string | null) ?? null
+    return data
   }
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setUnconfirmed(false)
     setLoading(true)
-    const email = await resolveEmail(identifier)
-    if (!email) {
+
+    const result = await callAuthFn({
+      mode:       'signin',
+      identifier: identifier.trim(),
+      password,
+    })
+
+    if (!result) {
       setLoading(false)
-      if (!error) setError(
-        'No account found for that username. If you recently signed up and haven\'t confirmed your email yet, ' +
-        'check your inbox for the confirmation link — usernames are only available after email confirmation.'
-      )
+      setError('Sign-in is temporarily unavailable — please try again in a moment.')
       return
     }
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
-    if (err) {
+
+    if (!result.ok) {
       setLoading(false)
-      if (err.message.toLowerCase().includes('email not confirmed')) {
-        setUnconfirmedEmail(email)
+      if (result.code === 'email_not_confirmed') {
+        setUnconfirmed(true)
         setResendSent(false)
+      } else if (result.code === 'rate_limited') {
+        setError('Too many sign-in attempts. Please wait a few minutes and try again.')
+      } else if (result.code === 'server_error') {
+        setError('Sign-in is temporarily unavailable — please try again in a moment.')
       } else {
-        setError(err.message)
+        // Deliberately identical for an unknown username and a wrong password,
+        // so the login form cannot be used to discover who has an account.
+        setError('Incorrect email/username or password.')
       }
       return
     }
+
+    const { error: sessionErr } = await supabase.auth.setSession({
+      access_token:  result.access_token!,
+      refresh_token: result.refresh_token!,
+    })
+    if (sessionErr) {
+      setLoading(false)
+      setError(sessionErr.message)
+      return
+    }
+
     // Check whether a second factor is required
     const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     setLoading(false)
@@ -178,9 +211,8 @@ export default function LoginPage() {
   }
 
   const handleResendConfirmation = async () => {
-    if (!unconfirmedEmail) return
     setResendLoading(true)
-    await supabase.auth.resend({ type: 'signup', email: unconfirmedEmail })
+    await callAuthFn({ mode: 'resend', identifier: identifier.trim() })
     setResendLoading(false)
     setResendSent(true)
   }
@@ -189,18 +221,25 @@ export default function LoginPage() {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const email = await resolveEmail(identifier)
-    if (!email) {
-      setLoading(false)
-      if (!error) setError('No account found for that username or email.')
-      return
-    }
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+
+    const result = await callAuthFn({
+      mode:        'reset',
+      identifier:  identifier.trim(),
+      redirect_to: `${window.location.origin}/reset-password`,
     })
     setLoading(false)
-    if (err) setError(err.message)
-    else setResetSent(true)
+
+    if (!result) {
+      setError('Password reset is temporarily unavailable — please try again in a moment.')
+      return
+    }
+    if (!result.ok && result.code === 'rate_limited') {
+      setError('Too many requests. Please wait a few minutes and try again.')
+      return
+    }
+    // Always the same confirmation, account or no account — otherwise this
+    // form would report whether a given username exists.
+    setResetSent(true)
   }
 
   return (
@@ -371,16 +410,16 @@ export default function LoginPage() {
                 </div>
               )}
 
-              {unconfirmedEmail && (
+              {unconfirmed && (
                 <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                   <div className="flex items-start gap-2.5">
                     <MailWarning className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
                     <div className="space-y-1">
                       <p className="font-semibold">Email not yet confirmed</p>
                       <p>
-                        Check your inbox for the confirmation link we sent to{' '}
-                        <span className="font-medium">{unconfirmedEmail}</span>.
-                        Click it to activate your account, then try signing in again.
+                        Check the inbox for this account's email address — we sent a
+                        confirmation link. Click it to activate your account, then try
+                        signing in again.
                       </p>
                       {resendSent ? (
                         <p className="mt-1 flex items-center gap-1 text-xs font-medium text-amber-700">
