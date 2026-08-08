@@ -764,6 +764,7 @@ create table public.intra_flows (
   org_id              uuid        not null default public.get_current_org_id()
                       references public.organizations(id) on delete set null,
   created_at          timestamptz default now(),
+  updated_at          timestamptz default now(),
   import_seq          bigint      generated always as identity
 );
 

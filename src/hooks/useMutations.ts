@@ -398,25 +398,38 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         .eq('id', id)
         .single()
 
+      // Never let the client repoint a row to another tenant/owner or forge its id.
+      const { id: _id, org_id: _orgId, created_by: _createdBy, updated_at: _updatedAt, ...safeUpdates } = updates
+
       // A stage_code_1 edit repoints the row at a different fund — re-resolve
       // category_id so the authoritative link follows the displayed name.
-      const resolved = await syncCategoryIdOnUpdate(table, updates)
+      const resolved = await syncCategoryIdOnUpdate(table, safeUpdates)
 
-      // Only inflow_transactions and outflow_transactions have updated_at
-      const withTimestamp = table !== 'intra_flows'
-        ? { ...resolved, updated_at: new Date().toISOString() }
-        : resolved
+      const withTimestamp = { ...resolved, updated_at: new Date().toISOString() }
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
-      const { data: updatedRows, error: err } = await supabase
-        .from(table)
-        .update(withTimestamp)
-        .eq('id', id)
-        .select('id')
+      let query = supabase.from(table).update(withTimestamp).eq('id', id)
+
+      // Optimistic locking: only write if the row hasn't changed since it was loaded.
+      // A zero-row result then means "someone else saved first" rather than "not found".
+      const originalUpdatedAt = (oldData as { updated_at?: string } | null)?.updated_at
+      if (originalUpdatedAt) {
+        query = query.eq('updated_at', originalUpdatedAt)
+      }
+
+      const { data: updatedRows, error: err } = await query.select('id')
 
       if (err) throw err
       if (!updatedRows?.length) {
+        if (originalUpdatedAt) {
+          const { data: stillExists } = await supabase.from(table).select('id').eq('id', id).maybeSingle()
+          throw new Error(
+            stillExists
+              ? 'This record was changed by someone else since you opened it. Please reload and try again.'
+              : 'Record not found or update blocked by permissions.',
+          )
+        }
         throw new Error('Record not found or update blocked by permissions.')
       }
 
