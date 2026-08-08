@@ -4341,7 +4341,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                 {result.importBatchId && result.imported > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
                     <span className="text-xs text-gray-600">
-                      Made a mistake, or something look wrong? You can remove exactly the
+                      Made a mistake, or something looks wrong? You can remove exactly the
                       {' '}{result.imported.toLocaleString()} row(s) this import just added.
                     </span>
                     <button
