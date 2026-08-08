@@ -53,4 +53,35 @@ describe('detectDateFormat', () => {
     const r = detectDateFormat(['01/01/2026', '07/25/2025', '18/07/2025'])
     expect(r).toMatchObject({ format: 'MM/DD/YYYY' })
   })
+
+  // The gap this covers: Excel's own default rendering for a date cell is
+  // often "18-Jul-2025", not a numeric arrangement at all. Before this, a
+  // column entirely in that shape produced zero numeric evidence and fell all
+  // the way through to no-evidence — detection never fired, silently.
+  describe('month-name cells — the day/month order is spelled out, not numeric', () => {
+    it('detects "DD-Mon-YYYY"', () => {
+      expect(detectDateFormat(['18-Jul-2025', '01-Aug-2025']).kind).toBe('month-name')
+    })
+    it('detects "DD Month YYYY"', () => {
+      expect(detectDateFormat(['18 July 2025']).kind).toBe('month-name')
+    })
+    it('detects "Mon DD, YYYY"', () => {
+      expect(detectDateFormat(['Jul 18, 2025']).kind).toBe('month-name')
+    })
+    it('detects "DD/Mon/YYYY"', () => {
+      expect(detectDateFormat(['18/Jul/2025']).kind).toBe('month-name')
+    })
+    it('is not fooled by a non-month three-letter word', () => {
+      expect(detectDateFormat(['18-Xyz-2025']).kind).not.toBe('month-name')
+    })
+    it('numeric evidence still wins over a mixed column', () => {
+      const r = detectDateFormat(['18-Jul-2025', '01/05/2026', '18/07/2025'])
+      expect(r).toMatchObject({ kind: 'decided', format: 'DD/MM/YYYY' })
+    })
+  })
+
+  it('strips invisible characters before matching, same as normalizeId', () => {
+    expect(detectDateFormat(['18-Jul-2025 ']).kind).toBe('month-name')
+    expect(detectDateFormat(['​18/07/2025']).kind).toBe('decided')
+  })
 })

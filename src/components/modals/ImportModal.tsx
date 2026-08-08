@@ -2328,6 +2328,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                     </p>
                   )
                 }
+                if (d.kind === 'month-name') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates spell out the month (e.g. 18-Jul-2025) — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
                 if (d.kind === 'ambiguous') {
                   return (
                     <p className="text-[11px] text-amber-600 flex items-start gap-1">
