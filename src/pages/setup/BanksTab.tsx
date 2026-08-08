@@ -118,6 +118,11 @@ export function BanksTab({ onAdd, onEdit, onDelete }: {
                           {bank.is_foreign_currency && (
                             <span className="px-1.5 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700 border border-amber-200 shrink-0">FX</span>
                           )}
+                          {bank.is_system && (
+                            <span className="flex items-center gap-1 px-1.5 py-0.5 text-xs font-semibold rounded bg-gray-100 text-gray-500 border border-gray-200 shrink-0">
+                              <Lock className="w-3 h-3" /> System
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 font-mono text-xs">
@@ -135,13 +140,15 @@ export function BanksTab({ onAdd, onEdit, onDelete }: {
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => onDelete(bank)}
-                            className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
-                            title="Delete" aria-label="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!bank.is_system && (
+                            <button
+                              onClick={() => onDelete(bank)}
+                              className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-danger hover:bg-red-50 transition-colors"
+                              title="Delete" aria-label="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

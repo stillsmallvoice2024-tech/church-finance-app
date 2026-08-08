@@ -562,8 +562,12 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             type="text"
             placeholder="e.g. First Bank of Nigeria"
             {...register('name')}
-            className={inputCls(!!errors.name)}
+            disabled={!!editRecord?.is_system}
+            className={`${inputCls(!!errors.name)} disabled:bg-gray-100 disabled:text-gray-500`}
           />
+          {editRecord?.is_system && (
+            <p className="text-xs text-gray-400 mt-0.5">The Cash bank is managed automatically and can't be renamed.</p>
+          )}
         </Field>
 
         <Field label="Account Number" error={errors.account_number?.message}>

@@ -491,10 +491,15 @@ create table public.banks (
   starting_balance_alloc_type      text        check (starting_balance_alloc_type in ('percentage', 'amount')),
   starting_balance_allocations     jsonb       not null default '[]',
   is_foreign_currency              bool        not null default false,
+  is_system                        boolean     not null default false,
   org_id                           uuid        not null default public.get_current_org_id()
                                    references public.organizations(id) on delete set null,
   created_at                       timestamptz default now()
 );
+
+-- At most one system bank ("Cash") per org.
+create unique index if not exists idx_banks_one_system_per_org
+  on public.banks (org_id) where is_system;
 
 -- ── Allocation Configs ────────────────────────────────────────────────────────
 create table public.allocation_configs (
@@ -2527,12 +2532,39 @@ begin
     and  user_id = v_user_id
     and  role    = 'viewer';
 
+  -- Every org gets a system-owned "Cash" bank — users cannot create it
+  -- manually and cannot rename or delete it (see trg_protect_system_bank).
+  insert into public.banks (org_id, name, currency, is_system)
+  values (v_org_id, 'Cash', 'NGN', true);
+
   return v_org_id;
 end;
 $$;
 
 grant execute on function public.create_organization(text) to authenticated;
 grant execute on function public.normalize_org_name(text) to authenticated;
+
+-- Protect system banks from rename/delete.
+create or replace function public.protect_system_bank_fn()
+returns trigger language plpgsql as $$
+begin
+  if tg_op = 'DELETE' then
+    if old.is_system then
+      raise exception 'The "Cash" bank is managed automatically and cannot be deleted.';
+    end if;
+    return old;
+  end if;
+
+  if old.is_system and (new.name is distinct from old.name or new.is_system is distinct from old.is_system) then
+    raise exception 'The "Cash" bank is managed automatically and cannot be renamed.';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_protect_system_bank
+  before update or delete on public.banks
+  for each row execute function public.protect_system_bank_fn();
 
 create or replace function public.complete_org_onboarding(
   p_org_id            uuid,

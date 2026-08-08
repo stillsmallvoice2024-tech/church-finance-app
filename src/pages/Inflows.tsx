@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  TrendingUp, Pencil, Trash2, PlusCircle,
+  TrendingUp, Pencil, Trash2, PlusCircle, Landmark,
   ChevronDown, ChevronRight, AlertCircle, RefreshCw, AlertTriangle,
 } from 'lucide-react'
 import { Card }                    from '../components/ui/Card'
@@ -10,6 +10,7 @@ import { BulkResultsModal, type BulkResults } from '../components/ui/BulkResults
 import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { EditFXInflowModal }       from '../components/modals/EditFXInflowModal'
 import { BulkEditInflowModal }     from '../components/modals/BulkEditInflowModal'
+import { MarkDepositedModal }      from '../components/modals/MarkDepositedModal'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
@@ -212,6 +213,7 @@ export default function Inflows() {
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkResults, setBulkResults] = useState<BulkResults | null>(null)
   const [bulkEditOpen,      setBulkEditOpen]      = useState(false)
+  const [depositRow,        setDepositRow]        = useState<InflowTransaction | null>(null)
 
   const { selectedIds, toggleRow, clearAll, selectAllRows, allSelected } = useBulkSelection(
     data.filter(r => !PROTECTED_TYPES.has(r.transaction_type ?? '')),
@@ -235,6 +237,10 @@ export default function Inflows() {
   useEffect(() => { clearAll() }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0); clearAll() }, [infState.sortKey, infState.sortDir, infState.searchCol, infState.advancedSort, infState.pageSize]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setPage(0) }, [showUnmappedOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const cashBankName = banks.find(b => b.is_system)?.name
+  const canMarkDeposited = (r: InflowTransaction) =>
+    !!cashBankName && r.bank_name === cashBankName && !r.deposit_group_id
 
   const openEdit = (r: InflowTransaction) => {
     if (r.transaction_type === 'fx_conversion') {
@@ -573,6 +579,11 @@ export default function Inflows() {
                     </div>
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       <ReceiptBadge entityType="inflow" entityId={row.id} />
+                      {canWrite() && canMarkDeposited(row) && (
+                        <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
+                          <Landmark className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {canWrite() && !isProtected && (
                         <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                           <Pencil className="w-3.5 h-3.5" />
@@ -704,6 +715,11 @@ export default function Inflows() {
                         <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <ReceiptBadge entityType="inflow" entityId={row.id} />
+                            {canWrite() && canMarkDeposited(row) && (
+                              <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
+                                <Landmark className="w-4 h-4" />
+                              </button>
+                            )}
                             {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                               <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
                                 <Pencil className="w-4 h-4" />
@@ -793,6 +809,12 @@ export default function Inflows() {
         onResults={setBulkResults}
       />
       <BulkResultsModal results={bulkResults} onClose={() => setBulkResults(null)} />
+      <MarkDepositedModal
+        open={!!depositRow}
+        onClose={() => setDepositRow(null)}
+        onSuccess={() => { toast('Marked as deposited', 'success'); setDepositRow(null); refetch() }}
+        inflow={depositRow}
+      />
       {canWrite() && <MobileFab icon={PlusCircle} label="Add Inflow" onClick={() => { setEditRecord(null); setModalOpen(true) }} />}
       <DescriptionTooltip tooltip={descTooltip} />
       <EditFXInflowModal
