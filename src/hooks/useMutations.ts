@@ -305,6 +305,89 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
   return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
 }
 
+// ── useMarkCashDeposited ───────────────────────────────────────────────────────
+// "Mark as deposited" on a Cash inflow: auto-creates the matching bank outflow
+// (same amount/fund) and links the two via the existing deposit_group_id /
+// offset_role pairing (see LinkDepositGroupModal) so the pair reconciles as a
+// balanced group instead of the user re-entering the outflow by hand.
+
+export interface MarkCashDepositedInput {
+  inflowId:    string
+  date:        string
+  depositedBy: string
+  bankName:    string
+}
+
+export function useMarkCashDeposited(): MutationHook<MarkCashDepositedInput, string> {
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const mutate = useCallback(async (input: MarkCashDepositedInput): Promise<string> => {
+    const { user } = useAuthStore.getState()
+    if (!user?.id) throw new Error('You must be signed in.')
+    setLoading(true); setError(null)
+    try {
+      const { data: source, error: fetchErr } = await supabase
+        .from('inflow_transactions')
+        .select('id, date, amount, category_id, stage_code_1, deposit_group_id')
+        .eq('id', input.inflowId)
+        .single()
+      if (fetchErr) throw fetchErr
+      if (!source) throw new Error('Inflow record not found.')
+      if (source.deposit_group_id) throw new Error('This inflow has already been marked as deposited.')
+      if (input.date < source.date) throw new Error('Deposit date cannot be before the original transaction date.')
+
+      const groupId = crypto.randomUUID()
+      const depositedBy = input.depositedBy.trim()
+
+      // The outflow is tagged 'bank_deposit' / offset_role 'root' so it surfaces
+      // on the dedicated Bank Deposits tracking page (BankMovement.tsx) the same
+      // way manually-entered deposits do.
+      const { data: outflow, error: outErr } = await supabase
+        .from('outflow_transactions')
+        .insert({
+          date:               input.date,
+          amount_disbursed:   source.amount,
+          bank_total:         source.amount,
+          bank_name:          input.bankName,
+          category_id:        source.category_id,
+          stage_code_1:       source.stage_code_1,
+          description:        `Cash deposit — deposited by ${depositedBy}`,
+          is_pending_deduction: false,
+          transaction_type:   'bank_deposit',
+          deposit_group_id:   groupId,
+          offset_role:        'root',
+          created_by:         user.id,
+          ...orgPayload(),
+        })
+        .select('id')
+        .single()
+      if (outErr) throw outErr
+      if (!outflow?.id) throw new Error('No ID returned after insert.')
+
+      const { error: updErr } = await supabase
+        .from('inflow_transactions')
+        .update({
+          deposit_group_id:       groupId,
+          offset_role:            'offset',
+          root_transaction_id:    outflow.id,
+          root_transaction_table: 'outflow_transactions',
+        })
+        .eq('id', input.inflowId)
+      if (updErr) throw updErr
+
+      useTransactionSyncStore.getState().bumpOutflow()
+      useTransactionSyncStore.getState().bumpInflow()
+
+      return outflow.id
+    } catch (err) {
+      const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
+    } finally { setLoading(false) }
+  }, [])
+
+  return { mutate, loading, error, reset: useCallback(() => setError(null), []) }
+}
+
 // ── useAddIntraFlow ────────────────────────────────────────────────────────────
 
 export function useAddIntraFlow(): MutationHook<AddIntraFlowInput, string> {

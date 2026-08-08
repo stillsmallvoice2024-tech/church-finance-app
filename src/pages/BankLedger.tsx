@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown, ArrowLeft, X, AlertTriangle } from 'lucide-react'
+import { BookOpen, AlertCircle, RefreshCw, Pencil, ChevronRight, ChevronDown, ArrowLeft, X, AlertTriangle, Landmark } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 import { useDetailLevel } from '../hooks/useDetailLevel'
 import { SimpleShell } from '../components/ui/SimpleShell'
@@ -20,6 +20,7 @@ import { exportCSV }     from '../utils/csvExport'
 import { ExportDropdown } from '../components/ui/ExportDropdown'
 import { AddInflowModal }  from '../components/modals/AddInflowModal'
 import { AddOutflowModal } from '../components/modals/AddOutflowModal'
+import { MarkDepositedModal } from '../components/modals/MarkDepositedModal'
 import type { InflowTransaction, OutflowTransaction } from '../hooks/useTransactions'
 import { useDescriptionExpand }    from '../hooks/useDescriptionExpand'
 import { DescriptionCell, DescriptionTooltip } from '../components/ui/DescriptionCell'
@@ -44,6 +45,8 @@ import { PageHelpBanner }  from '../components/ui/PageHelpBanner'
 import { useFirstVisitTour } from '../hooks/useFirstVisitTour'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+const MARK_DEPOSITED_HELP = 'Mark this cash as deposited — automatically creates the matching bank outflow for you, so you don’t have to enter it by hand.'
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   refund:                   'Refund',
@@ -104,6 +107,7 @@ export default function BankLedger() {
   const [datePreset,   setDatePreset]   = useState<DatePreset | null>(null)
   const [editInflow,   setEditInflow]   = useState<InflowTransaction | null>(null)
   const [editOutflow,  setEditOutflow]  = useState<OutflowTransaction | null>(null)
+  const [depositRow,   setDepositRow]   = useState<InflowTransaction | null>(null)
   const [expandedId,   setExpandedId]   = useState<string | null>(null)
   const { tooltip: descTooltip, setTooltip: setDescTooltip } = useDescriptionExpand()
 
@@ -270,6 +274,9 @@ export default function BankLedger() {
   const selectedBankObj  = banks.find(b => b.id === selectedBank)
   const selectedBankName = selectedBankObj?.name ?? ''
   const displayCurrency  = selectedBankObj?.currency ?? baseCurrencyCode
+
+  const canMarkDeposited = (row: LedgerRow) =>
+    !!selectedBankObj?.is_system && row.entity_type === 'inflow' && !!row.inflowData && !row.inflowData.deposit_group_id
 
   const BL_CSV_HEADERS = ['Date', 'Description', 'Type', `Inflow (${displayCurrency})`, `Outflow (${displayCurrency})`, `Balance (${displayCurrency})`]
   const blCsvRow = (r: LedgerRow) => [
@@ -495,6 +502,18 @@ export default function BankLedger() {
                             {TXN_TYPE_LABELS[row.transaction_type] ?? row.transaction_type}
                           </span>
                         )}
+                        {canWrite() && canMarkDeposited(row) && (
+                          <span className="flex items-center">
+                            <button
+                              onClick={() => row.inflowData && setDepositRow(row.inflowData)}
+                              className="touch-target p-1 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Mark Deposited" aria-label="Mark Deposited"
+                            >
+                              <Landmark className="w-3.5 h-3.5" />
+                            </button>
+                            <HelpTooltip content={MARK_DEPOSITED_HELP} iconSize="w-3 h-3" />
+                          </span>
+                        )}
                         {canWrite() && !isBF && !isTableRow && (
                           <button
                             onClick={() => row.entity_type === 'inflow' && row.inflowData
@@ -612,17 +631,31 @@ export default function BankLedger() {
                       </td>
                       {canWrite() && (
                         <td className="px-2 py-3">
-                          {!isBF && !isTableRow && (
-                            <button
-                              onClick={() => row.entity_type === 'inflow' && row.inflowData
-                                ? setEditInflow(row.inflowData)
-                                : row.outflowData && setEditOutflow(row.outflowData)}
-                              className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
-                              title="Edit source record" aria-label="Edit source record"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {canMarkDeposited(row) && (
+                              <span className="flex items-center">
+                                <button
+                                  onClick={() => row.inflowData && setDepositRow(row.inflowData)}
+                                  className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                  title="Mark Deposited" aria-label="Mark Deposited"
+                                >
+                                  <Landmark className="w-3.5 h-3.5" />
+                                </button>
+                                <HelpTooltip content={MARK_DEPOSITED_HELP} iconSize="w-3 h-3" />
+                              </span>
+                            )}
+                            {!isBF && !isTableRow && (
+                              <button
+                                onClick={() => row.entity_type === 'inflow' && row.inflowData
+                                  ? setEditInflow(row.inflowData)
+                                  : row.outflowData && setEditOutflow(row.outflowData)}
+                                className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Edit source record" aria-label="Edit source record"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       )}
                     </tr>,
@@ -655,6 +688,12 @@ export default function BankLedger() {
         onClose={() => setEditOutflow(null)}
         onSuccess={() => { setEditOutflow(null); load(selectedBank, selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
         editRecord={editOutflow}
+      />
+      <MarkDepositedModal
+        open={!!depositRow}
+        onClose={() => setDepositRow(null)}
+        onSuccess={() => { setDepositRow(null); load(selectedBank, selectedBankName, selectedBankObj?.starting_balance ?? 0) }}
+        inflow={depositRow}
       />
       <DescriptionTooltip tooltip={descTooltip} />
     </div>
