@@ -1655,23 +1655,29 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → occurrence ${occ}`
             )
           }
-          const sc = rowStageCodes[ri]
-          if (sc) {
-            if (sc.s1) row.stage_code_1 = sc.s1
-            if (sc.s2) row.stage_code_2 = sc.s2
-          }
-          const otId = rowOutflowTypes[ri]
-          if (otId) {
-            row.outflow_type_id = otId
-          } else if (sc?.s1 && outflowTypeOptions.length > 0) {
-            // Fallback auto-mapping for rows not explicitly configured in UI
-            const cat = categories.find((c: { name: string }) => c.name === sc.s1)
-            if (cat) {
-              const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-              if (suggested) row.outflow_type_id = suggested.id
-            } else {
-              const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
-              if (match) row.outflow_type_id = match.id
+          // Non-Normal transactions skip distribution/category rules entirely —
+          // same enforcement as the inflow side above. Applies equally to a type
+          // the user picked and one auto-detected (reversal detection seeds
+          // rowTxnTypes the same way a manual selection would).
+          if (!txnType) {
+            const sc = rowStageCodes[ri]
+            if (sc) {
+              if (sc.s1) row.stage_code_1 = sc.s1
+              if (sc.s2) row.stage_code_2 = sc.s2
+            }
+            const otId = rowOutflowTypes[ri]
+            if (otId) {
+              row.outflow_type_id = otId
+            } else if (sc?.s1 && outflowTypeOptions.length > 0) {
+              // Fallback auto-mapping for rows not explicitly configured in UI
+              const cat = categories.find((c: { name: string }) => c.name === sc.s1)
+              if (cat) {
+                const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                if (suggested) row.outflow_type_id = suggested.id
+              } else {
+                const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
+                if (match) row.outflow_type_id = match.id
+              }
             }
           }
           row.is_pending_deduction = rowPendingDeductions.has(ri)
@@ -3191,10 +3197,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                       {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
-                                    {autoReversalRis.has(ri) && txnType === 'reversal' && (
-                                      <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
-                                    )}
                                   </div>
+                                  {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                    <p className="text-[10px] text-primary px-3 -mt-1 pb-1.5">Auto-detected from statement — change above if wrong.</p>
+                                  )}
                                   {(txnType === 'refund' || txnType === 'reversal') && (
                                     <div className="px-3 pb-2 flex items-center gap-2">
                                       <span className="text-xs text-gray-500 w-28 shrink-0">Original Txn ID:</span>
@@ -3816,10 +3822,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                     {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                   </select>
-                                  {autoReversalRis.has(ri) && txnType === 'reversal' && (
-                                      <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
-                                    )}
                                 </div>
+                                {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                  <p className="text-[10px] text-primary px-3 -mt-1 pb-1.5">Auto-detected from statement — change above if wrong.</p>
+                                )}
                                 {outflowTypeOptions.length > 0 && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-xs text-gray-500 w-28 shrink-0">Outflow Type:</span>
