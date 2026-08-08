@@ -27,32 +27,48 @@ describe('auditDateColumn', () => {
 
   // The real failures, each reproduced from the input that caused it.
 
-  it('catches a bare year stored as a number, which parses to 1905', () => {
+  // parseDate now refuses these outright rather than silently inventing
+  // 1905-07-18 / 2026-01-01 / 2001-01-05 — `parsed` is null in every case here.
+  // The audit's job is to say WHICH kind of null it is, from the raw shape.
+
+  it('catches a bare year stored as a number, which used to parse to 1905', () => {
     const f = findingFor([...clean(), 2026], 'year-as-serial')
     expect(f?.count).toBe(1)
     expect(f?.blocking).toBe(true)
-    expect(f?.samples[0]).toMatchObject({ raw: '2026', parsed: '1905-07-18' })
+    expect(f?.samples[0]).toMatchObject({ raw: '2026', parsed: null })
   })
 
-  it('catches a bare year stored as text, which invents 1 January', () => {
+  it('catches a bare year stored as text, which used to invent 1 January', () => {
     const f = findingFor([...clean(), '2026'], 'bare-year')
     expect(f?.count).toBe(1)
     expect(f?.blocking).toBe(true)
-    expect(f?.samples[0]).toMatchObject({ raw: '2026', parsed: '2026-01-01' })
+    expect(f?.samples[0]).toMatchObject({ raw: '2026', parsed: null })
   })
 
-  it('catches a day and month with no year, which defaults to 2001', () => {
+  it('catches a day and month with no year, which used to default to 2001', () => {
     const f = findingFor([...clean(), '5-Jan', '22-Dec'], 'missing-year')
     expect(f?.count).toBe(2)
     expect(f?.blocking).toBe(true)
-    expect(f?.samples.map(s => s.parsed)).toEqual(['2001-01-05', '2001-12-22'])
+    expect(f?.samples.every(s => s.parsed === null)).toBe(true)
   })
 
-  it('catches formats that parse to nothing, which would drop the row silently', () => {
-    const f = findingFor([...clean(), '18-07-2025', '18/07/25', '18.07.2025'], 'unparsed')
+  // parseDate now accepts -, . and 2-digit years alongside / and 4-digit years
+  // — these used to be exactly the formats that silently dropped a row.
+  it('no longer flags dash, dot or 2-digit-year separators as unparseable', () => {
+    expect(symptoms(['18-07-2025', '18/07/25', '18.07.2025'])).toEqual([])
+  })
+
+  it('catches genuinely unrecognisable cells, which would drop the row silently', () => {
+    const f = findingFor([...clean(), 'not a date', 'abc', '07/2025'], 'unparsed')
     expect(f?.count).toBe(3)
     expect(f?.blocking).toBe(true)
     expect(f?.samples.every(s => s.parsed === null)).toBe(true)
+  })
+
+  it('rejects a calendar-invalid date rather than silently correcting it', () => {
+    const f = findingFor([...clean(), '32/13/2025', '29/02/2025'], 'unparsed')
+    expect(f?.count).toBe(2)
+    expect(f?.blocking).toBe(true)
   })
 
   // A genuine 2001 date must not be mistaken for the JS default.
@@ -103,7 +119,7 @@ describe('auditDateColumn', () => {
   })
 
   it('orders findings with the certain failures first', () => {
-    const cells = [...clean(), '18-07-2025', 2026, '2026', '5-Jan', '01/05/2019']
+    const cells = [...clean(), 'not a date', 2026, '2026', '5-Jan', '01/05/2019']
     expect(symptoms(cells)).toEqual([
       'unparsed', 'year-as-serial', 'bare-year', 'missing-year', 'out-of-range',
     ])

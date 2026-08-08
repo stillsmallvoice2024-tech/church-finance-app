@@ -3,27 +3,25 @@ import { parseDate, type DateFormat } from './parseDate'
 /**
  * Audit the date column of a statement BEFORE anything is written.
  *
- * Dates were being accepted silently whether or not they parsed sensibly, and
- * the damage only surfaced months later in reports. Three real failures, all
- * traced back to parseDate's `new Date(s)` fallback ignoring the chosen format:
+ * parseDate now rejects a cell outright rather than guessing at it, so every
+ * failure here shows up as `parsed === null`. That is correct but not, on its
+ * own, informative — "could not be read" doesn't tell a treasurer whether the
+ * fix is the format selector or the file itself. This classifies WHY a cell
+ * failed, from its raw shape, so the three real causes stay distinguishable:
  *
- *   the number 2026        an Excel serial read as a date -> 1905-07-18
- *   the string "2026"      -> 2026-01-01, the year right and the day invented
- *   "5-Jan" (no year)      -> 2001-01-05, V8's default year
- *
- * A fourth is quieter and worse: "18-07-2025", "18/07/25" and "18.07.2025" all
- * parse to null, and a null date makes the import skip the row entirely. A
- * statement in any of those formats loses transactions with no error.
+ *   the number 2026     a year, not an Excel serial
+ *   the string "2026"   a year with no day or month
+ *   "5-Jan"              a day and month with no year
  *
  * Running here rather than against stored data means the RAW cell is still in
- * hand, so these are identified exactly rather than guessed at from the wreckage.
+ * hand, so these are identified exactly rather than guessed at from wreckage.
  */
 
 export type DateSymptom =
-  | 'unparsed'
   | 'year-as-serial'
   | 'bare-year'
   | 'missing-year'
+  | 'unparsed'
   | 'out-of-range'
 
 export interface DateAuditSample {
@@ -52,15 +50,9 @@ export interface DateAudit {
 
 const MAX_SAMPLES = 5
 
-// Excel serials count days from 1899-12-30. A real statement date is ~45000 and
-// climbing; 20000 is 1954. Anything below that in a date column is not a date —
-// overwhelmingly it is a bare year (2024, 2025, 2026) that landed in the cell.
+// Mirrors parseDate's own floor: below this a number in a date column is
+// overwhelmingly a bare year, not a serial.
 const MIN_PLAUSIBLE_SERIAL = 20000
-
-// V8 defaults the year to 2001 when a string carries only a day and a month
-// ("5-Jan", "22-Dec"). No statement this app imports predates 2024, so a parsed
-// year of 2001 with no "2001" in the cell is that default, not a real date.
-const JS_DEFAULT_YEAR = '2001'
 
 /**
  * Rows whose date falls far outside the rest of the statement are flagged
@@ -84,6 +76,19 @@ function outOfRangeBounds(dates: string[]): { lo: string; hi: string } | null {
   const median = at(0.5)
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
   return { lo: iso(median - margin), hi: iso(median + margin) }
+}
+
+/** Classifies why a cell that parseDate rejected looks the way it does. */
+function classifyRejected(raw: unknown, rawText: string): DateSymptom {
+  if (typeof raw === 'number' && raw < MIN_PLAUSIBLE_SERIAL) return 'year-as-serial'
+  if (/^\d{4}$/.test(rawText)) return 'bare-year'
+  // A day-and-month shape with no year: "5-Jan", "Jan-5", or a bare two-part
+  // numeric like "5/1" with nothing that could be a year.
+  const twoPartNumeric = /^(\d{1,2})[\s\-./](\d{1,2})$/.test(rawText)
+  const dayMonthName   = /^(\d{1,2})[\s\-./]+[A-Za-z]{3,}$/.test(rawText)
+                       || /^[A-Za-z]{3,}[\s\-./]+\d{1,2}$/.test(rawText)
+  if (twoPartNumeric || dayMonthName) return 'missing-year'
+  return 'unparsed'
 }
 
 export function auditDateColumn(
@@ -117,33 +122,18 @@ export function auditDateColumn(
     const rawText = String(raw).trim()
     const sample: DateAuditSample = { raw: rawText, parsed, row }
 
-    if (parsed === null) { add('unparsed', sample); continue }
-
-    // A number too small to be a date. The parsed result is meaningless, but the
-    // number itself is almost always the year.
-    if (typeof raw === 'number' && raw < MIN_PLAUSIBLE_SERIAL) {
-      add('year-as-serial', sample); continue
-    }
-    // A bare four-digit year as text: the year survives, the day and month were
-    // never in the cell.
-    if (/^\d{4}$/.test(rawText)) { add('bare-year', sample); continue }
-    // Day and month present, year absent — parsed year is JS's default and the
-    // cell says nothing of the sort.
-    if (parsed.startsWith(`${JS_DEFAULT_YEAR}-`) && !rawText.includes(JS_DEFAULT_YEAR)) {
-      add('missing-year', sample); continue
-    }
-    if (bounds && (parsed < bounds.lo || parsed > bounds.hi)) {
-      add('out-of-range', sample); continue
-    }
+    if (parsed === null) { add(classifyRejected(raw, rawText), sample); continue }
+    if (bounds && (parsed < bounds.lo || parsed > bounds.hi)) { add('out-of-range', sample); continue }
   }
 
-  // Everything except out-of-range is a structural certainty: the cell cannot
-  // mean what it parsed to. Out-of-range is inference, so it warns instead.
+  // Every rejection is a structural certainty: parseDate already refused the
+  // cell. Out-of-range is inference over rows that DID parse, so it warns
+  // instead of blocking.
   const BLOCKING: Record<DateSymptom, boolean> = {
-    'unparsed':       true,
     'year-as-serial': true,
     'bare-year':      true,
     'missing-year':   true,
+    'unparsed':       true,
     'out-of-range':   false,
   }
 
@@ -164,20 +154,20 @@ export const DATE_SYMPTOM_TEXT: Record<DateSymptom, { title: string; detail: str
   'unparsed': {
     title:  'could not be read as dates',
     detail: 'These rows would be dropped without warning. Check the date format above matches the file — ' +
-            'formats like 18-07-2025, 18/07/25 and 18.07.2025 are not recognised.',
+            'formats like 18-07-2025, 18/07/25 and 18.07.2025 need the matching selection.',
   },
   'year-as-serial': {
     title:  'contain a year, not a date',
-    detail: 'The cell holds a plain number such as 2026. Read as a date it lands in 1905. ' +
+    detail: 'The cell holds a plain number such as 2026, which is not a usable date. ' +
             'The date column may be pointing at the wrong column.',
   },
   'bare-year': {
     title:  'contain only a year',
-    detail: 'There is no day or month in the cell, so importing these would invent 1 January.',
+    detail: 'There is no day or month in the cell, so this row cannot be dated automatically.',
   },
   'missing-year': {
     title:  'have a day and month but no year',
-    detail: 'Cells like "5-Jan" carry no year, and importing them would date the transaction to 2001.',
+    detail: 'Cells like "5-Jan" carry no year, so this row cannot be dated automatically.',
   },
   'out-of-range': {
     title:  'fall well outside the rest of the statement',

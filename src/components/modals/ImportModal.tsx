@@ -30,6 +30,7 @@ import { insertBatchResilient } from '../../utils/insertBatchResilient'
 import { nextOccurrence, rowFingerprint } from '../../utils/refOccurrence'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
 import { auditDateColumn, DATE_SYMPTOM_TEXT } from '../../utils/dateAudit'
+import { detectDateFormat, type DetectionResult } from '../../utils/detectDateFormat'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
@@ -176,6 +177,17 @@ interface ParsedSheet {
   headers:  string[]
   rows:     unknown[][]
   rowCount: number
+  /**
+   * Same shape as `rows`, but read with `raw: false` so each cell is the text
+   * Excel actually displays — not the underlying number. Reading `rows` alone
+   * with `raw: true`/default hands back an Excel date cell as its serial
+   * number (a date like 18/07/2025 is really the number 45856 formatted for
+   * display), so a preview built from `rows` shows the treasurer a number they
+   * never saw in the file and no basis for choosing DD/MM vs MM/DD. `rows`
+   * itself is left untouched — parsing keeps using the exact values it always
+   * did; this is display-only.
+   */
+  displayRows: unknown[][]
 }
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
@@ -328,7 +340,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // Derived
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
   const config  = targetTable ? TABLE_CONFIG[targetTable] : null
-  const preview = sheet?.rows.slice(0, 5) ?? []
+  // displayRows shows the text Excel actually renders (an Excel date cell as
+  // "18/07/2025", not the serial 45856 underneath it) — see ParsedSheet. Falls
+  // back to rows for PDF/CSV sources, where the two are identical anyway.
+  const preview = (sheet?.displayRows.length ? sheet.displayRows : sheet?.rows)?.slice(0, 5) ?? []
 
   // Allocation configs — load once so Step 4 and runImport can use them
   const { configs: allocConfigs, groups: allocGroups, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
@@ -393,7 +408,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
   // Date format (Phase A)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
-  
+  // What detectDateFormat found for the current sheet's date column, and
+  // whether the user has since overridden it — shown beside the radios so the
+  // choice is never a silent guess. Reset per sheet: `sheet.name` changes
+  // whenever a different file or a different tab within one file is selected.
+  const [dateFormatDetection, setDateFormatDetection] = useState<DetectionResult | null>(null)
+  const [dateFormatOverridden, setDateFormatOverridden] = useState(false)
+  const detectedForSheetRef = useRef<string | null>(null)
+
   // FX currency (Phase B)
   const [fxCurrency, setFxCurrency] = useState('')
 
@@ -677,6 +699,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     // Clear back-button sentinel ref so a fresh open can push a new one
     sentinelPushedRef.current = false
     pendingNavIsBackRef.current = false
+    setDateFormatDetection(null)
+    setDateFormatOverridden(false)
+    detectedForSheetRef.current = null
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
@@ -867,19 +892,44 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
       if (file.name.match(/\.pdf$/i)) {
         const { parsePDF } = await import('../../utils/pdfParser')
-        parsed = await parsePDF(file)
-        if (parsed.length === 0) throw new Error('No tabular data detected in this PDF. Ensure it contains a statement table.')
+        const pdfSheets = await parsePDF(file)
+        if (pdfSheets.length === 0) throw new Error('No tabular data detected in this PDF. Ensure it contains a statement table.')
+        // PDF cells are already text — nothing is hidden behind a serial number.
+        parsed = pdfSheets.map(s => ({ ...s, displayRows: s.rows }))
       } else if (file.name.match(/\.(xlsx|xls)$/i)) {
         const data = await file.arrayBuffer()
         const wb   = XLSX.read(data, { type: 'array', cellDates: false })
         parsed = wb.SheetNames.map(name => {
-          const ws        = wb.Sheets[name]
-          const rows      = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
-          const headerIdx = detectHeaderRow(rows)
-          const headers   = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
-          const dataRows  = rows.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c != null))
-          return { name, headers, rows: dataRows, rowCount: dataRows.length }
+          const ws = wb.Sheets[name]
+          // Two passes over the same sheet: `raw` (the actual values parsing
+          // uses) and `display` (raw: false — the text Excel renders, e.g. a
+          // date cell as "18/07/2025" rather than the serial 45856 underneath
+          // it). Both are sliced identically so row N lines up in each.
+          const rowsRaw     = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })  as unknown[][])
+          const rowsDisplay = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as unknown[][])
+          const headerIdx = detectHeaderRow(rowsRaw)
+          const headers   = (rowsRaw[headerIdx] ?? []).map(h => String(h ?? '').trim())
+          const rawTail     = rowsRaw.slice(headerIdx + 1)
+          const displayTail = rowsDisplay.slice(headerIdx + 1)
+          const keepIdx   = []
+          for (let i = 0; i < rawTail.length; i++) {
+            if (rawTail[i].some(c => c !== '' && c != null)) keepIdx.push(i)
+          }
+          const dataRows    = keepIdx.map(i => rawTail[i])
+          const displayRows = keepIdx.map(i => displayTail[i] ?? [])
+          return { name, headers, rows: dataRows, rowCount: dataRows.length, displayRows }
         })
+      } else if (file.name.match(/\.csv$/i)) {
+        const text = await file.text()
+        const wb   = XLSX.read(text, { type: 'string' })
+        const name = wb.SheetNames[0]
+        const ws   = wb.Sheets[name]
+        // CSV cells are already plain text — raw and display are the same pass.
+        const rows      = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
+        const headerIdx = detectHeaderRow(rows)
+        const headers   = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
+        const dataRows  = rows.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c != null))
+        parsed = [{ name, headers, rows: dataRows, rowCount: dataRows.length, displayRows: dataRows }]
       } else {
         throw new Error('Only .xlsx, .xls, and .csv files are supported.')
       }
@@ -1006,6 +1056,29 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     if (dateIdx < 0) return null
     return auditDateColumn((sheet.rows as unknown[][]).map(r => r[dateIdx]), dateFormat)
   }, [sheet, config, mapping, dateFormat])
+
+  // Auto-detect the date arrangement from the DISPLAYED text (see
+  // ParsedSheet.displayRows) once the date column is known, and pre-select it.
+  // Runs once per sheet — detectedForSheetRef guards against re-detecting on
+  // every keystroke elsewhere and against clobbering a manual override the
+  // user has since made. Changing the mapping's date column deliberately DOES
+  // re-detect: pointing at a different column is a new question.
+  useEffect(() => {
+    if (!sheet || !config) return
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    if (dateIdx < 0) return
+    const detectionKey = `${sheet.name}:${dateIdx}`
+    if (detectedForSheetRef.current === detectionKey) return
+    detectedForSheetRef.current = detectionKey
+    setDateFormatOverridden(false)
+
+    const displaySource = sheet.displayRows.length > 0 ? sheet.displayRows : sheet.rows
+    const result = detectDateFormat((displaySource as unknown[][]).map(r => r[dateIdx]))
+    setDateFormatDetection(result)
+    if (result.kind === 'decided') setDateFormat(result.format)
+    // excel-serial / iso / ambiguous / no-evidence: leave the current
+    // selection as-is. Ambiguous in particular must not silently pick a side.
+  }, [sheet, config, mapping])
 
   const proceedToRowConfig = useCallback(async () => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
@@ -2101,7 +2174,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               </select>
             </div>
 
-            {/* Date format selector */}
+            {/* Date format selector. Auto-detected where the file itself proves it
+                (a component over 12 can only be a day); the radios are always live
+                so a wrong guess — or a case the file can't prove either way — is
+                one click to correct. */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-600">Date format in this file</label>
               <div className="flex gap-4">
@@ -2112,13 +2188,62 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       name="dateFormat"
                       value={fmt}
                       checked={dateFormat === fmt}
-                      onChange={() => setDateFormat(fmt)}
+                      onChange={() => { setDateFormat(fmt); setDateFormatOverridden(true) }}
                       className="text-primary focus:ring-primary/30"
                     />
                     {fmt}
                   </label>
                 ))}
               </div>
+              {dateFormatDetection && !dateFormatOverridden && (() => {
+                const d = dateFormatDetection
+                if (d.kind === 'decided') {
+                  const dayFirst  = d.format === 'DD/MM/YYYY'
+                  const dayValue  = dayFirst ? d.a : d.b
+                  return (
+                    <p className="text-[11px] text-success flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        Detected from row {d.row}: <span className="font-mono">{d.a}/{d.b}/…</span> — {dayValue} can't
+                        be a month, so it must be the day, which comes {dayFirst ? 'first' : 'second'} here.
+                        Change the selection above if this is wrong.
+                      </span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'excel-serial') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates are stored as Excel date values — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'iso') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates are already YYYY-MM-DD — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'ambiguous') {
+                  return (
+                    <p className="text-[11px] text-amber-600 flex items-start gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        Every date in this column could be read either way (day and month are both ≤ 12
+                        in all {d.sampleCount} checked) — the file can't prove which arrangement is right.
+                        Check the file and choose above.
+                      </span>
+                    </p>
+                  )
+                }
+                return null
+              })()}
+              {dateFormatOverridden && (
+                <p className="text-[11px] text-gray-500">Using your selection above.</p>
+              )}
             </div>
 
             {/* FX Currency — only for fx_transactions */}
@@ -3924,7 +4049,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             .map(f => {
                               const colIdx = sheet.headers.findIndex(h => mapping[h] === f.key)
                               const val = colIdx >= 0 ? row[colIdx] : ''
-                              const display = f.key === 'date' ? (parseDate(val) ?? String(val)) : String(val ?? '')
+                              // Date parsing needs the RAW value (a serial number parses;
+                              // its display text does not) and dateFormat passed explicitly —
+                              // parseDate defaults to DD/MM/YYYY, so without it this preview
+                              // ignored the user's choice. Every other field shows the
+                              // DISPLAYED text, same reasoning as the Step 3 preview above.
+                              const displayVal = sheet.displayRows[ri]?.[colIdx] ?? val
+                              const display = f.key === 'date'
+                                ? (parseDate(val, dateFormat) ?? String(displayVal))
+                                : String(displayVal ?? '')
                               return (
                                 <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap border-r border-gray-50 last:border-0 max-w-[120px] truncate">
                                   {display}
