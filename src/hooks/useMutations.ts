@@ -404,10 +404,7 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
       // category_id so the authoritative link follows the displayed name.
       const resolved = await syncCategoryIdOnUpdate(table, safeUpdates)
 
-      // Only inflow_transactions and outflow_transactions have updated_at
-      const withTimestamp = table !== 'intra_flows'
-        ? { ...resolved, updated_at: new Date().toISOString() }
-        : resolved
+      const withTimestamp = { ...resolved, updated_at: new Date().toISOString() }
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
@@ -416,7 +413,7 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
       // Optimistic locking: only write if the row hasn't changed since it was loaded.
       // A zero-row result then means "someone else saved first" rather than "not found".
       const originalUpdatedAt = (oldData as { updated_at?: string } | null)?.updated_at
-      if (table !== 'intra_flows' && originalUpdatedAt) {
+      if (originalUpdatedAt) {
         query = query.eq('updated_at', originalUpdatedAt)
       }
 
@@ -424,7 +421,7 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
 
       if (err) throw err
       if (!updatedRows?.length) {
-        if (table !== 'intra_flows' && originalUpdatedAt) {
+        if (originalUpdatedAt) {
           const { data: stillExists } = await supabase.from(table).select('id').eq('id', id).maybeSingle()
           throw new Error(
             stillExists

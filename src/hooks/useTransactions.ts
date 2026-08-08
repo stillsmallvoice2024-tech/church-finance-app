@@ -93,6 +93,7 @@ export interface IntraFlowRow {
   reversal_of_id: string | null
   created_by: string | null
   created_at: string
+  updated_at: string | null
   import_seq: number | null
 }
 
