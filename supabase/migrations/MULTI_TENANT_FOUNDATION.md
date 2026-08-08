@@ -135,7 +135,8 @@ All functions: `SECURITY DEFINER STABLE`. They do NOT replace `is_admin()` / `is
 ## Phase 2 — Org Backfill (applied: 2026-05-28)
 
 **File:** `20260528000001_org_backfill.sql`
-**Rollback:** `20260528000001_org_backfill_rollback.sql`
+**Rollback:** `../rollbacks/20260528000002_org_backfill_rollback.sql` — manual only,
+never applied automatically. See `supabase/rollbacks/README.md`.
 
 ### What Phase 2 did
 

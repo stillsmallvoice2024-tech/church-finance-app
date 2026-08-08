@@ -200,14 +200,21 @@ export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
     supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId),
   ])
 
-  const fatal = seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error || allInflowRes.error || pctOutRes.error
+  // Every read is fatal. A failed query that degrades to an empty set renders a
+  // complete, confident, wrong balance sheet: opening balances missing, internal
+  // transfers missing, or special allocation rules mis-resolved — with nothing on
+  // screen to distinguish it from a correct one. In a ledger a failed read is an
+  // error, never an empty result.
+  const fatal = seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error
+    || allInflowRes.error || pctOutRes.error
+    || cobRes.error || intraFlowRes.error || incomeTypeRes.error
   if (fatal) return { byCategory: new Map(), seedTargets: new Map(), error: fatal.message }
 
   const incomeTypeGroup = new Map<string, string | null>(
     (incomeTypeRes.data ?? []).map((r: Record<string, unknown>) => [r.id as string, (r.special_config_group_id as string | null) ?? null]),
   )
 
-  const openingBalances = (cobRes.error ? [] : (cobRes.data ?? [])).map(ob => ({
+  const openingBalances = (cobRes.data ?? []).map(ob => ({
     budget_portion: ob.budget_portion as string | null,
     amount:         Number(ob.amount),
     category:       (ob.categories as unknown as { name: string } | null)?.name ?? '',
@@ -231,7 +238,7 @@ export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
     account_from?: string | null; from_category_id?: string | null
     account_to?:   string | null; to_category_id?:   string | null
   }
-  const intraByFund = ((intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) as IntraSnapshot[]).map(r => ({
+  const intraByFund = ((intraFlowRes.data ?? []) as IntraSnapshot[]).map(r => ({
     ...r,
     account_from: resolveFundName(namesById, r.from_category_id, r.account_from),
     account_to:   resolveFundName(namesById, r.to_category_id,   r.account_to),

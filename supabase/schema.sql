@@ -67,6 +67,9 @@ create table public.organizations (
   plan_expires_at       timestamptz,
   imported_rows_count   int         not null default 0,
   imported_rows_period_start timestamptz not null default now(),
+  -- Max OCR pages per UTC day (20260807000002_ocr_quota). Enforced by
+  -- consume_ocr_page(); raise per-org via the service role if needed.
+  ocr_daily_page_limit  int         not null default 300,
   -- Stripe linkage (20260806000000_stripe_billing). Written only by the
   -- billing edge functions under the service role — see Section 12.
   stripe_customer_id     text,
@@ -277,6 +280,97 @@ begin
   return v_new_count;
 end;
 $$;
+
+-- ── OCR spend control (20260807000002_ocr_quota) ─────────────────────────────
+-- The pdf-ocr Edge Function turns one request into one billed model call, so
+-- it must not be reachable on a valid JWT alone. consume_ocr_page() is the
+-- single authorising gate it calls before spending anything: membership, role
+-- and plan are checked server-side, then the org's daily page count is
+-- incremented under the upserted row's lock so concurrent pages cannot race
+-- past the cap. Service role only — granting it to authenticated would let any
+-- user burn their own org's allowance directly.
+create table if not exists public.ocr_usage (
+  org_id     uuid        not null references public.organizations(id) on delete cascade,
+  usage_date date        not null default (now() at time zone 'utc')::date,
+  pages      int         not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (org_id, usage_date)
+);
+
+create index if not exists idx_ocr_usage_date on public.ocr_usage(usage_date);
+
+-- RLS on with zero policies: denies anon and authenticated outright. The
+-- service role bypasses RLS; orgs see their usage via the RPC's return value.
+alter table public.ocr_usage enable row level security;
+revoke all on public.ocr_usage from anon, authenticated;
+
+create or replace function public.consume_ocr_page(
+  p_org_id  uuid,
+  p_user_id uuid,
+  p_pages   int default 1
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role  text;
+  v_limit int;
+  v_used  int;
+  v_want  int := greatest(coalesce(p_pages, 1), 1);
+begin
+  -- p_user_id is passed explicitly: the caller holds the service role, so
+  -- auth.uid() is null and the is_org_*() helpers cannot be reused here.
+  select role into v_role
+  from public.org_members
+  where org_id = p_org_id
+    and user_id = p_user_id
+    and status  = 'active';
+
+  if v_role is null then
+    return jsonb_build_object('allowed', false, 'reason', 'not_a_member');
+  end if;
+
+  if v_role not in ('owner', 'admin', 'accountant') then
+    return jsonb_build_object('allowed', false, 'reason', 'role_not_permitted');
+  end if;
+
+  if not public.org_plan_at_least(p_org_id, 'full') then
+    return jsonb_build_object('allowed', false, 'reason', 'plan_too_low');
+  end if;
+
+  select ocr_daily_page_limit into v_limit
+  from public.organizations
+  where id = p_org_id;
+
+  insert into public.ocr_usage (org_id, usage_date, pages)
+  values (p_org_id, (now() at time zone 'utc')::date, 0)
+  on conflict (org_id, usage_date)
+    do update set pages = public.ocr_usage.pages
+  returning pages into v_used;
+
+  if v_used + v_want > v_limit then
+    return jsonb_build_object(
+      'allowed', false, 'reason', 'daily_quota_exceeded',
+      'used', v_used, 'limit', v_limit
+    );
+  end if;
+
+  -- Incremented only once all three gates pass, so a refusal costs the org
+  -- nothing from its own allowance.
+  update public.ocr_usage
+  set pages = pages + v_want, updated_at = now()
+  where org_id = p_org_id
+    and usage_date = (now() at time zone 'utc')::date
+  returning pages into v_used;
+
+  return jsonb_build_object('allowed', true, 'used', v_used, 'limit', v_limit);
+end;
+$$;
+
+revoke all on function public.consume_ocr_page(uuid, uuid, int) from public, anon, authenticated;
+grant execute on function public.consume_ocr_page(uuid, uuid, int) to service_role;
 
 -- is_admin: owner or admin in ANY active org — used by tables without org_id.
 create or replace function public.is_admin()
@@ -926,14 +1020,49 @@ create table public.dynamic_report_snapshots (
 );
 
 -- ── Currencies ───────────────────────────────────────────────────────────────
+-- Org-scoped: each organisation owns its own currency list. Surrogate id PK
+-- (not code) so the table behaves like every other org-scoped table in the
+-- backup/restore registry; uniqueness of the code is per organisation.
 create table public.currencies (
-  code       text    primary key,
+  id         uuid    primary key default gen_random_uuid(),
+  org_id     uuid    not null references public.organizations(id) on delete cascade,
+  code       text    not null,
   name       text    not null,
   symbol     text    not null default '',
   flag       text,
   is_active  boolean not null default true,
-  sort_order integer not null default 99
+  sort_order integer not null default 99,
+  unique (org_id, code)
 );
+create index currencies_org_id_idx on public.currencies (org_id);
+
+-- Default currency list handed to every new organisation.
+-- Mirrors DEFAULT_CURRENCIES in src/hooks/useCurrencies.ts.
+create or replace function public.seed_default_currencies(p_org_id uuid)
+returns void language sql security definer set search_path = public as $$
+  insert into public.currencies (org_id, code, name, symbol, flag, is_active, sort_order)
+  select p_org_id, d.code, d.name, d.symbol, d.flag, true, d.sort_order
+  from (values
+    ('NGN', 'Nigerian Naira', '₦', '🇳🇬', 0),
+    ('USD', 'US Dollar',      '$', '🇺🇸', 1),
+    ('GBP', 'British Pound',  '£', '🇬🇧', 2),
+    ('EUR', 'Euro',           '€', '🇪🇺', 3),
+    ('CNY', 'Chinese Yuan',   '¥', '🇨🇳', 4)
+  ) as d(code, name, symbol, flag, sort_order)
+  on conflict (org_id, code) do nothing;
+$$;
+
+create or replace function public.seed_currencies_on_org_insert()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public.seed_default_currencies(new.id);
+  return new;
+end $$;
+
+drop trigger if exists trg_seed_currencies_on_org_insert on public.organizations;
+create trigger trg_seed_currencies_on_org_insert
+  after insert on public.organizations
+  for each row execute function public.seed_currencies_on_org_insert();
 
 -- ── User Preferences ──────────────────────────────────────────────────────────
 create table public.user_preferences (
@@ -1176,7 +1305,8 @@ declare
     'stripe_customer_id',
     'stripe_subscription_id',
     'imported_rows_count',
-    'imported_rows_period_start'
+    'imported_rows_period_start',
+    'ocr_daily_page_limit'
   ];
 begin
   for v_col in
@@ -1209,6 +1339,7 @@ begin
   or new.stripe_subscription_id     is distinct from old.stripe_subscription_id
   or new.imported_rows_count        is distinct from old.imported_rows_count
   or new.imported_rows_period_start is distinct from old.imported_rows_period_start
+  or new.ocr_daily_page_limit       is distinct from old.ocr_daily_page_limit
   then
     raise exception
       'Billing and usage fields on organizations can only be changed by the billing system'
@@ -1750,14 +1881,17 @@ grant execute on function public.save_dynamic_report_blocks(uuid, jsonb) to auth
 
 -- ── currencies ─────────────────────────────────────────────────────────────────
 
+-- Org-scoped throughout: is_admin() is "admin in ANY active org", so using it
+-- here would let an admin of one organisation rewrite every other tenant's
+-- currency list.
 create policy "currencies_select" on public.currencies
-  for select using (auth.role() = 'authenticated');
+  for select using (public.is_org_member(org_id));
 create policy "currencies_insert" on public.currencies
-  for insert with check (public.is_admin());
+  for insert with check (public.is_org_admin(org_id));
 create policy "currencies_update" on public.currencies
-  for update using (public.is_admin());
+  for update using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
 create policy "currencies_delete" on public.currencies
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── user_preferences ───────────────────────────────────────────────────────────
 
@@ -4085,10 +4219,7 @@ WITH seed (table_key, insert_order, conflict_column, org_scoped, delete_in_repla
   VALUES
     -- Configuration
     ('organizations'::text,               0::integer, 'id'::text,   false, false, 'update'::text),
-    -- currencies is a GLOBAL table (PK code, no org_id). It is deliberately
-    -- never deleted here: an unscoped wipe would clear the currency list for
-    -- every tenant on the instance, not just the one being restored.
-    ('currencies',                        1, 'code', false, false, 'update'),
+    ('currencies',                        1, 'id',   true,  true,  'update'),
     ('category_groups',                   2, 'id',   true,  true,  'update'),
     ('categories',                        3, 'id',   true,  true,  'update'),
     ('category_opening_balances',         4, 'id',   true,  true,  'update'),

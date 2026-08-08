@@ -1,4 +1,4 @@
-import type { ReconciliationIssue } from './reconciliationEngine'
+import type { FailedRule, ReconciliationIssue } from './reconciliationEngine'
 
 export type HealthStatus = 'healthy' | 'warning' | 'critical' | 'incomplete'
 
@@ -24,6 +24,11 @@ export interface ReconciliationDiagnostics {
   affectedCategories: string[]
   totalImbalance: number
   healthStatus: HealthStatus
+  /** True when one or more rules failed — the run verified less than the full set. */
+  partial: boolean
+  /** Human-readable names of the rules that could not run. */
+  failedRuleNames: string[]
+  failedRules: FailedRule[]
   bankSummaries: BankHealthSummary[]
   issuesByBank: Map<string, ReconciliationIssue[]>
   issuesByCategory: Map<string, ReconciliationIssue[]>
@@ -63,7 +68,10 @@ function possibleCausesForBank(issues: ReconciliationIssue[]): string[] {
   return causes
 }
 
-export function aggregateDiagnostics(issues: ReconciliationIssue[]): ReconciliationDiagnostics {
+export function aggregateDiagnostics(
+  issues: ReconciliationIssue[],
+  failedRules: FailedRule[] = [],
+): ReconciliationDiagnostics {
   const issuesByBank        = new Map<string, ReconciliationIssue[]>()
   const issuesByCategory    = new Map<string, ReconciliationIssue[]>()
   const issuesByTransaction = new Map<string, ReconciliationIssue[]>()
@@ -152,10 +160,17 @@ export function aggregateDiagnostics(issues: ReconciliationIssue[]): Reconciliat
     if (bankIssues.some(i => i.ruleId !== BALANCE_SNAPSHOT_RULE)) affectedBanks.push(bankName)
   }
 
-  const totalIssues   = criticalIssues + warningIssues + infoIssues
+  const totalIssues = criticalIssues + warningIssues + infoIssues
+  const partial     = failedRules.length > 0
+
+  // Real problems still outrank an incomplete run — a critical issue we DID
+  // find is worth reporting as critical. But "healthy" is a positive claim
+  // that every check passed, so it may only be made when every check ran.
+  // Otherwise the status is 'incomplete' ("Unverified"), never green.
   const overallStatus: HealthStatus =
     criticalIssues > 0 ? 'critical' :
     warningIssues  > 0 ? 'warning'  :
+    partial        ? 'incomplete'   :
     'healthy'
 
   return {
@@ -167,6 +182,9 @@ export function aggregateDiagnostics(issues: ReconciliationIssue[]): Reconciliat
     affectedCategories: [...issuesByCategory.keys()],
     totalImbalance,
     healthStatus:       overallStatus,
+    partial,
+    failedRuleNames:    failedRules.map(r => r.ruleName),
+    failedRules,
     bankSummaries,
     issuesByBank,
     issuesByCategory,

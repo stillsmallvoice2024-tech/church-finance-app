@@ -447,7 +447,7 @@ export default function LoginPage() {
                   <input
                     type="text"
                     value={identifier}
-                    onChange={e => { setIdentifier(e.target.value); setUnconfirmedEmail(null); setResendSent(false) }}
+                    onChange={e => { setIdentifier(e.target.value); setUnconfirmed(false); setResendSent(false) }}
                     placeholder="you@example.com or username"
                     required
                     autoComplete="username"
@@ -491,7 +491,7 @@ export default function LoginPage() {
               </form>
 
               <button
-                onClick={() => { setMode('forgot'); setError(null); setUnconfirmedEmail(null); setResendSent(false) }}
+                onClick={() => { setMode('forgot'); setError(null); setUnconfirmed(false); setResendSent(false) }}
                 className="mt-4 w-full text-center text-xs text-primary hover:underline"
               >
                 Forgot your password?
