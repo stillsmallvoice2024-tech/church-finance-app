@@ -23,6 +23,26 @@ async function allRows(query: any): Promise<{ data: unknown[]; error: { message:
   return { data: all, error: null }
 }
 
+/**
+ * Aborts a rule when a read it depends on failed.
+ *
+ * A rule that cannot read its data has NOT verified anything, so it must never
+ * return an empty issue list — that is indistinguishable from "checked, all
+ * clean" and is exactly how a broken check turns into a false Healthy badge.
+ * Throwing routes the failure to the engine, which reports the run as partial.
+ */
+function assertReads(
+  ruleName: string,
+  reads: Record<string, { error: { message: string } | null }>,
+): void {
+  const failures = Object.entries(reads)
+    .filter(([, res]) => res.error)
+    .map(([label, res]) => `${label}: ${res.error!.message}`)
+  if (failures.length > 0) {
+    throw new Error(`${ruleName} could not read ${failures.join('; ')}`)
+  }
+}
+
 // ── Rule 1: Orphan transfer detection ─────────────────────────────────────────
 // An intrabank transfer references a bank name that no longer exists.
 
@@ -38,7 +58,7 @@ const orphanTransferRule: ReconciliationRule = {
         .eq('org_id', orgId)),
       supabase.from('banks').select('id, name').eq('org_id', orgId),
     ])
-    if (transfersRes.error || banksRes.error) return []
+    assertReads('Orphan Transfer', { intrabank_transfers: transfersRes, banks: banksRes })
 
     const bankNames = new Set((banksRes.data ?? []).map((b: Record<string, unknown>) => b.name as string))
     const bankIds   = new Set((banksRes.data ?? []).map((b: Record<string, unknown>) => b.id as string))
@@ -97,7 +117,7 @@ const missingTransferPairRule: ReconciliationRule = {
         .eq('org_id', orgId)
         .eq('transaction_type', 'bank_deposit')),
     ])
-    if (depositsRes.error || taggedInflowsRes.error) return []
+    assertReads('Missing Transfer Pair', { bank_deposits: depositsRes, inflow_transactions: taggedInflowsRes })
 
     const taggedKey = new Map<string, string>()
     for (const t of taggedInflowsRes.data) {
@@ -149,6 +169,8 @@ const duplicateImportRule: ReconciliationRule = {
         .not('transaction_id', 'is', null)
         .not('bank_name', 'is', null)),
     ])
+
+    assertReads('Duplicate Import', { inflow_transactions: inflowRes, outflow_transactions: outflowRes })
 
     type DupInfo = { count: number; description: string | null; date: string; amount: number }
     const inflowMap = new Map<string, DupInfo>()
@@ -225,7 +247,7 @@ const pendingDeductionRule: ReconciliationRule = {
         .eq('is_pending_deduction', true)
         .lte('date', cutoffStr),
     )
-    if (res.error) return []
+    assertReads('Stale Pending Deduction', { outflow_transactions: res })
 
     return res.data.map(t => {
       const r = t as { id: string; date: string; bank_name: string | null; amount_disbursed: number; description: string | null }
@@ -270,7 +292,14 @@ const balanceMismatchRule: ReconciliationRule = {
         .order('statement_date', { ascending: false }),
     ])
 
-    if (banksRes.error) return []
+    // The ledger reads matter as much as the bank list: a partial read would
+    // understate book balances and invent mismatches that do not exist.
+    // refRes is deliberately excluded — bank_statement_balances is optional.
+    assertReads('Balance Mismatch', {
+      banks:                banksRes,
+      inflow_transactions:  inflowRes,
+      outflow_transactions: outflowRes,
+    })
 
     const refMap = new Map<string, { balance: number; date: string }>()
     if (!refRes.error) {
@@ -362,7 +391,7 @@ const allocationInconsistencyRule: ReconciliationRule = {
       .eq('org_id', orgId)
       .eq('status', 'locked')
 
-    if (res.error) return []
+    assertReads('Allocation Inconsistency', { allocation_configs: res })
 
     const issues: ReconciliationIssue[] = []
     for (const c of res.data ?? []) {
@@ -419,7 +448,13 @@ const negativeBalanceRule: ReconciliationRule = {
         .eq('org_id', orgId)),
     ])
 
-    if (banksRes.error) return []
+    // A partial ledger read would understate balances and report accounts as
+    // negative when they are not — abort rather than guess.
+    assertReads('Negative Balance', {
+      banks:                banksRes,
+      inflow_transactions:  inflowRes,
+      outflow_transactions: outflowRes,
+    })
 
     const bookBalance = new Map<string, number>()
     for (const b of banksRes.data ?? []) {
@@ -489,6 +524,13 @@ const incompleteReversalRule: ReconciliationRule = {
         .eq('org_id', orgId).in('transaction_type', SPECIAL)
         .is('offset_role', null).is('original_transaction_id', null).is('root_transaction_id', null)),
     ])
+
+    assertReads('Incomplete Reversal', {
+      'inflow_transactions (offsets)':  inOffsetRes,
+      'inflow_transactions (special)':  inSpecialRes,
+      'outflow_transactions (offsets)': outOffsetRes,
+      'outflow_transactions (special)': outSpecialRes,
+    })
 
     const issues: ReconciliationIssue[] = []
 
