@@ -1928,6 +1928,12 @@ create index if not exists idx_inflow_bank_id     on public.inflow_transactions(
 create index if not exists idx_outflow_bank_id    on public.outflow_transactions(bank_id);
 create index if not exists idx_fx_bank_id         on public.fx_transactions(bank_id);
 
+-- Balance-aggregate RPC support (20260807000002_balance_aggregate_rpcs).
+create index if not exists idx_inflow_org_stage2   on public.inflow_transactions(org_id, stage_code_2);
+create index if not exists idx_outflow_org_stage2  on public.outflow_transactions(org_id, stage_code_2);
+create index if not exists idx_inflow_org_bank_id  on public.inflow_transactions(org_id, bank_id);
+create index if not exists idx_outflow_org_bank_id on public.outflow_transactions(org_id, bank_id);
+
 -- ================================================================
 -- 11. RPCS, SECURITY FUNCTIONS AND GRANTS
 -- ================================================================
@@ -4390,6 +4396,192 @@ $$;
 REVOKE ALL ON FUNCTION public.purge_stale_restore_batches(interval) FROM public;
 
 NOTIFY pgrst, 'reload schema';
+
+
+-- ================================================================
+-- BALANCE AGGREGATES (20260807000002_balance_aggregate_rpcs)
+-- ================================================================
+-- Server-side sums for the balance screens. Before these, every balance view
+-- streamed the org's whole transaction history to the browser and added it up
+-- in JavaScript. See the migration file for the full rationale.
+--
+-- SECURITY INVOKER (not DEFINER) is deliberate: the caller's RLS policies still
+-- apply to the underlying tables, so p_org_id cannot be used to read another
+-- tenant's ledger.
+--
+-- Fidelity rule: these are a performance change, NOT a numbers change. Every
+-- filter and sign convention mirrors the JavaScript it replaces exactly,
+-- including two behaviours that are arguably wrong but out of scope here:
+--   1. Outflows with a NULL stage_code_2 are excluded from the percentage
+--      bucket (the client used PostgREST `not.eq`, which drops NULLs).
+--   2. Bank balances count every outflow but exclude balance_brought_forward
+--      inflows, and apply no offset_role handling on either side.
+
+drop function if exists public.org_bank_balance_totals(uuid);
+
+create function public.org_bank_balance_totals(p_org_id uuid)
+returns table (
+  bank_id       uuid,
+  bank_name     text,
+  inflow_total  numeric,
+  outflow_total numeric
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  with inf as (
+    select
+      i.bank_id                                         as bank_id,
+      case when i.bank_id is null then i.bank_name end  as bank_name,
+      sum(coalesce(i.amount, 0))                        as total
+    from public.inflow_transactions i
+    where i.org_id = p_org_id
+      and i.transaction_type is distinct from 'balance_brought_forward'
+      and (i.bank_id is not null or nullif(i.bank_name, '') is not null)
+    group by 1, 2
+  ),
+  outf as (
+    select
+      o.bank_id                                         as bank_id,
+      case when o.bank_id is null then o.bank_name end  as bank_name,
+      sum(coalesce(o.amount_disbursed, 0))              as total
+    from public.outflow_transactions o
+    where o.org_id = p_org_id
+      and (o.bank_id is not null or nullif(o.bank_name, '') is not null)
+    group by 1, 2
+  )
+  select
+    coalesce(inf.bank_id,   outf.bank_id)   as bank_id,
+    coalesce(inf.bank_name, outf.bank_name) as bank_name,
+    coalesce(inf.total, 0)                  as inflow_total,
+    coalesce(outf.total, 0)                 as outflow_total
+  from inf
+  full outer join outf
+    on  inf.bank_id   is not distinct from outf.bank_id
+    and inf.bank_name is not distinct from outf.bank_name;
+$$;
+
+-- Grouping is by the RAW (category_id, stage_code_1) pair, not by a resolved
+-- name: rename-resolution stays in src/utils/categoryReferences.ts so there is
+-- one implementation rather than two that can drift.
+
+drop function if exists public.org_category_fund_totals(uuid);
+
+create function public.org_category_fund_totals(p_org_id uuid)
+returns table (
+  category_id    uuid,
+  stage_code_1   text,
+  seed_in        numeric,
+  seed_out       numeric,
+  seed_out_count bigint,
+  sav_in         numeric,
+  sav_out        numeric,
+  pct_out        numeric
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  with inflow_side as (
+    select
+      i.category_id,
+      i.stage_code_1,
+      sum(coalesce(i.amount, 0)) filter (where i.stage_code_2 = 'Specific Seed') as seed_in,
+      sum(coalesce(i.amount, 0)) filter (where i.stage_code_2 = 'Savings')       as sav_in
+    from public.inflow_transactions i
+    where i.org_id = p_org_id
+      and i.stage_code_2 in ('Specific Seed', 'Savings')
+    group by 1, 2
+  ),
+  outflow_side as (
+    select
+      o.category_id,
+      o.stage_code_1,
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (where o.stage_code_2 = 'Specific Seed')  as seed_out,
+      count(*) filter (where o.stage_code_2 = 'Specific Seed') as seed_out_count,
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (where o.stage_code_2 = 'Savings')        as sav_out,
+      -- NULL stage_code_2 excluded on purpose — see the fidelity note above.
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (
+        where o.stage_code_2 is not null
+          and o.stage_code_2 <> 'Specific Seed'
+          and o.stage_code_2 <> 'Savings'
+      )                                                  as pct_out
+    from public.outflow_transactions o
+    where o.org_id = p_org_id
+    group by 1, 2
+  )
+  select
+    coalesce(i.category_id,  o.category_id)  as category_id,
+    coalesce(i.stage_code_1, o.stage_code_1) as stage_code_1,
+    coalesce(i.seed_in,        0) as seed_in,
+    coalesce(o.seed_out,       0) as seed_out,
+    coalesce(o.seed_out_count, 0) as seed_out_count,
+    coalesce(i.sav_in,         0) as sav_in,
+    coalesce(o.sav_out,        0) as sav_out,
+    coalesce(o.pct_out,        0) as pct_out
+  from inflow_side i
+  full outer join outflow_side o
+    on  i.category_id  is not distinct from o.category_id
+    and i.stage_code_1 is not distinct from o.stage_code_1;
+$$;
+
+-- Per-target breakdown for the Designated Gifts tab. `latest` is text because
+-- the client compares it as an ISO string, and '' sorts below every real date.
+
+drop function if exists public.org_seed_target_totals(uuid);
+
+create function public.org_seed_target_totals(p_org_id uuid)
+returns table (
+  category_id  uuid,
+  stage_code_1 text,
+  label        text,
+  total        numeric,
+  entry_count  bigint,
+  latest       text
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  select
+    i.category_id,
+    i.stage_code_1,
+    coalesce(
+      nullif(i.specific_seed_description, ''),
+      nullif(i.description, ''),
+      '(No target specified)'
+    )                                        as label,
+    sum(coalesce(i.amount, 0))               as total,
+    count(*)                                 as entry_count,
+    coalesce(max(i.date)::text, '')          as latest
+  from public.inflow_transactions i
+  where i.org_id = p_org_id
+    and i.stage_code_2 = 'Specific Seed'
+  group by 1, 2, 3;
+$$;
+
+revoke all on function public.org_bank_balance_totals(uuid)   from public;
+revoke all on function public.org_category_fund_totals(uuid)  from public;
+revoke all on function public.org_seed_target_totals(uuid)    from public;
+
+grant execute on function public.org_bank_balance_totals(uuid)  to authenticated;
+grant execute on function public.org_category_fund_totals(uuid) to authenticated;
+grant execute on function public.org_seed_target_totals(uuid)   to authenticated;
+
+notify pgrst, 'reload schema';
 
 
 -- ================================================================
