@@ -884,6 +884,37 @@ create table public.invitation_emails (
   sent_at       timestamptz not null default now()
 );
 
+-- Caps invites per org per hour: org name and inviter name are both
+-- user-controllable and get emailed out under our sending domain, so an
+-- unbounded invite rate is an open phishing-blast vector.
+create or replace function public.enforce_invite_rate_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public as $$
+declare
+  v_recent_count int;
+begin
+  select count(*) into v_recent_count
+  from public.invitations
+  where org_id = new.org_id
+    and created_at > now() - interval '1 hour';
+
+  if v_recent_count >= 20 then
+    raise exception 'Too many invitations sent recently. Please try again later.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists invitations_rate_limit on public.invitations;
+create trigger invitations_rate_limit
+  before insert on public.invitations
+  for each row
+  execute function public.enforce_invite_rate_limit();
+
 -- ── Audit Log ─────────────────────────────────────────────────────────────────
 create table public.audit_log (
   id         uuid        default gen_random_uuid() primary key,
