@@ -86,6 +86,23 @@ jobs:
           done < /tmp/new_migrations.txt
           exit $status
 
+      # The runner's stock postgresql-client is v16, but the Supabase local stack
+      # runs Postgres 17 — pg_dump refuses to dump from a newer server than itself.
+      # Install a matching client so the pg_dump calls below don't fail on that
+      # version check; steps that need it reference the versioned binary path
+      # directly rather than relying on this being first on PATH.
+      - name: Install PostgreSQL 17 client tools
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
       - name: Start local stack with an empty migration set
         if: steps.diff.outputs.has_new == 'true'
         run: |
@@ -109,7 +126,7 @@ jobs:
           # they don't come from a template new databases inherit from. Snapshot that
           # scaffolding now, before schema.sql adds this repo's own tables, so the
           # comparison database built below can be seeded with the same starting point.
-          pg_dump "$DB" --schema-only --no-owner --no-privileges \
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --schema-only --no-owner --no-privileges \
             > /tmp/pre_schema_baseline.sql
 
           psql "$DB" -v ON_ERROR_STOP=1 -f supabase/schema.sql
@@ -146,10 +163,10 @@ jobs:
           psql "$BASELINE" -v ON_ERROR_STOP=1 -f /tmp/pre_schema_baseline.sql
           psql "$BASELINE" -v ON_ERROR_STOP=1 -f supabase/schema.sql
 
-          pg_dump "$DB" --schema-only --no-owner --no-privileges \
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --schema-only --no-owner --no-privileges \
             | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
             > /tmp/schema_plus_migrations.sql
-          pg_dump "$BASELINE" --schema-only --no-owner --no-privileges \
+          /usr/lib/postgresql/17/bin/pg_dump "$BASELINE" --schema-only --no-owner --no-privileges \
             | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
             > /tmp/schema_sql_only.sql
 
