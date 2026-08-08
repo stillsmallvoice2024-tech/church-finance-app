@@ -67,8 +67,10 @@ jobs:
           fi
 
       # Only enforced for migrations this PR adds/changes, not the pre-existing
-      # history (which predates this convention). Rollback file must sit next
-      # to its migration with the same timestamp: <ts>_desc.sql -> <ts>_desc_rollback.sql
+      # history (which predates this convention). Rollback scripts live in
+      # supabase/rollbacks/, not supabase/migrations/ (see supabase/rollbacks/README.md
+      # — an undo script left in migrations/ would run as if it were a forward
+      # migration), named to match: <ts>_desc.sql -> rollbacks/<ts>_desc_rollback.sql
       - name: Require a paired rollback file for each new migration
         if: steps.diff.outputs.has_new == 'true'
         run: |
@@ -76,7 +78,7 @@ jobs:
           while IFS= read -r f; do
             base=$(basename "$f" .sql)
             [[ "$base" == *_rollback ]] && continue
-            rollback="supabase/migrations/${base}_rollback.sql"
+            rollback="supabase/rollbacks/${base}_rollback.sql"
             if [ ! -f "$rollback" ]; then
               echo "::error file=$f::Missing paired rollback file: $(basename "$rollback")"
               status=1
