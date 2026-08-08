@@ -30,11 +30,11 @@ create index if not exists idx_import_batches_org on public.import_batches(org_i
 
 alter table public.import_batches enable row level security;
 
-create policy "import_batches_select" on public.import_batches
+create policy if not exists "import_batches_select" on public.import_batches
   for select using (public.is_org_member(org_id));
-create policy "import_batches_insert" on public.import_batches
+create policy if not exists "import_batches_insert" on public.import_batches
   for insert with check (public.is_org_finance_user(org_id));
-create policy "import_batches_update" on public.import_batches
+create policy if not exists "import_batches_update" on public.import_batches
   for update using (public.is_org_finance_user(org_id));
 
 NOTIFY pgrst, 'reload schema';
