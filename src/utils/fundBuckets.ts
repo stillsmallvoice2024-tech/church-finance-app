@@ -9,6 +9,7 @@ import {
   type AllocationConfig,
   type SpecialConfigGroup,
 } from '../store/allocationStore'
+import { useTransactionSyncStore } from '../store/transactionSyncStore'
 
 // ────────────────────────────────────────────────────────────────────────────
 // Single source of truth for the three fund buckets per category.
@@ -46,20 +47,54 @@ export interface FundBuckets {
   error:       string | null
 }
 
+// ── Pre-aggregated input shapes (server-summed) ──────────────────────────────
+//
+// Five of the row sets below — seed in/out, savings in/out, percentage outflows
+// — are only ever summed. `org_category_fund_totals` and `org_seed_target_totals`
+// (migration 20260807000003) do that summing in Postgres and return one row per
+// category / per seed target instead of one per transaction. Feeding those
+// totals in here produces byte-identical output to walking the raw rows, so the
+// two paths stay interchangeable: the raw arrays remain the fallback for a
+// database that has not had the migration applied yet.
+
+export interface PreAggregatedFundTotals {
+  category: string
+  seedIn:   number
+  seedOut:  number
+  savIn:    number
+  savOut:   number
+  pctOut:   number
+}
+
+export interface PreAggregatedSeedTarget {
+  category: string
+  label:    string
+  total:    number
+  count:    number
+  latest:   string
+}
+
 // ── Raw input shapes (already org-scoped by the caller) ──────────────────────
 
 export interface FundBucketInputs {
-  seedInflows:  Array<{ stage_code_1: string | null; amount: number; date?: string | null; specific_seed_description?: string | null; description?: string | null }>
-  seedOutflows: Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
-  savInflows:   Array<{ stage_code_1: string | null; amount: number }>
-  savOutflows:  Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
+  seedInflows?:  Array<{ stage_code_1: string | null; amount: number; date?: string | null; specific_seed_description?: string | null; description?: string | null }>
+  seedOutflows?: Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
+  savInflows?:   Array<{ stage_code_1: string | null; amount: number }>
+  savOutflows?:  Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
   allInflows:   Array<{ date: string; amount: number; stage_code_2: string | null; allocation_config_id: string | null; income_type_id: string | null; transaction_type?: string | null; offset_role?: string | null; description?: string | null }>
   openingBalances: Array<{ budget_portion: string | null; amount: number; category: string }>
   intraFlows:   Array<{ account_from: string | null; account_from_stage2: string | null; account_to: string | null; account_to_stage2: string | null; total_amount: number; date?: string | null }>
-  pctOutflows:  Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
+  pctOutflows?:  Array<{ stage_code_1: string | null; amount_disbursed: number; offset_role?: string | null }>
   incomeTypeGroup: Map<string, string | null>
   configs: AllocationConfig[]
   groups:  SpecialConfigGroup[]
+  // Server-summed replacement for the five optional row arrays above. When
+  // present those arrays are expected to be empty — supplying both would
+  // double-count.
+  preAggregated?: {
+    totals:      PreAggregatedFundTotals[]
+    seedTargets: PreAggregatedSeedTarget[]
+  }
 }
 
 // ── Pure aggregator (unit-testable, no I/O) ──────────────────────────────────
@@ -74,22 +109,38 @@ export function aggregateFundBuckets(inp: FundBucketInputs): Omit<FundBuckets, '
     return b
   }
 
-  const seedContribs = new Map<string, Array<{ label: string; amount: number; date: string }>>()
-  const addSeed = (cat: string, label: string, amount: number, date: string) => {
+  // `count` is how many underlying transactions this contribution stands for.
+  // It is 1 per row on the raw path; on the pre-aggregated path one entry can
+  // stand for many rows, and the Designated Gifts tab shows that tally.
+  const seedContribs = new Map<string, Array<{ label: string; amount: number; date: string; count: number }>>()
+  const addSeed = (cat: string, label: string, amount: number, date: string, count = 1) => {
     const arr = seedContribs.get(cat) ?? []
-    arr.push({ label, amount, date })
+    arr.push({ label, amount, date, count })
     seedContribs.set(cat, arr)
   }
 
+  // Server-summed seed / savings / percentage-outflow totals, when available.
+  for (const t of inp.preAggregated?.totals ?? []) {
+    const b = ensure(t.category)
+    b.seedIn  += t.seedIn
+    b.seedOut += t.seedOut
+    b.savIn   += t.savIn
+    b.savOut  += t.savOut
+    b.pctOut  += t.pctOut
+  }
+  for (const s of inp.preAggregated?.seedTargets ?? []) {
+    addSeed(s.category, s.label, s.total, s.latest, s.count)
+  }
+
   // Direct Specific Seed inflows
-  for (const r of inp.seedInflows) {
+  for (const r of inp.seedInflows ?? []) {
     const cat = r.stage_code_1 || '(Uncategorised)'
     const amt = Number(r.amount)
     ensure(cat).seedIn += amt
     addSeed(cat, r.specific_seed_description || r.description || '(No target specified)', amt, r.date ?? '')
   }
   // Direct Specific Seed outflows (offset rows subtract instead of add)
-  for (const r of inp.seedOutflows) {
+  for (const r of inp.seedOutflows ?? []) {
     const cat = r.stage_code_1 || '(Uncategorised)'
     const amt = Number(r.amount_disbursed || 0)
     const net = r.offset_role === 'offset' ? -amt : amt
@@ -97,10 +148,10 @@ export function aggregateFundBuckets(inp: FundBucketInputs): Omit<FundBuckets, '
     addSeed(cat, 'Withdrawal', -net, '')
   }
   // Direct Savings inflows / outflows
-  for (const r of inp.savInflows) {
+  for (const r of inp.savInflows ?? []) {
     ensure(r.stage_code_1 || '(Uncategorised)').savIn += Number(r.amount)
   }
-  for (const r of inp.savOutflows) {
+  for (const r of inp.savOutflows ?? []) {
     const cat = r.stage_code_1 || '(Uncategorised)'
     const amt = Number(r.amount_disbursed || 0)
     ensure(cat).savOut += r.offset_role === 'offset' ? -amt : amt
@@ -157,7 +208,7 @@ export function aggregateFundBuckets(inp: FundBucketInputs): Omit<FundBuckets, '
   }
 
   // Percentage outflows (all non-seed/non-savings), offset rows subtract
-  for (const r of inp.pctOutflows) {
+  for (const r of inp.pctOutflows ?? []) {
     const cat = r.stage_code_1 || '(Uncategorised)'
     const amt = Number(r.amount_disbursed || 0)
     ensure(cat).pctOut += r.offset_role === 'offset' ? -amt : amt
@@ -170,7 +221,7 @@ export function aggregateFundBuckets(inp: FundBucketInputs): Omit<FundBuckets, '
     for (const c of contribs) {
       const t = byTarget.get(c.label) ?? { target: c.label, total: 0, count: 0, latest: '' }
       t.total += c.amount
-      t.count += 1
+      t.count += c.count
       if (c.date && c.date > t.latest) t.latest = c.date
       byTarget.set(c.label, t)
     }
@@ -182,31 +233,113 @@ export function aggregateFundBuckets(inp: FundBucketInputs): Omit<FundBuckets, '
 
 // ── DB-fetch wrapper ─────────────────────────────────────────────────────────
 
-export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
+// Rows the config-distribution pass discards outright. Pushing these to the
+// server means they are never sent to the browser at all — previously every one
+// of them was downloaded and then dropped by `isNonContributing`.
+const NON_ALLOCATABLE_LIST = 'balance_brought_forward,reversal,refund,bank_deposit,intrabank_transfer'
+
+// PostgREST NULL semantics: `neq`/`not.in` never match a NULL, so each filter
+// needs an explicit `is.null` branch or rows with no value would be dropped.
+// Separate `.or()` calls are ANDed together.
+function percentageEligibleInflows(orgId: string) {
+  return supabase
+    .from('inflow_transactions')
+    .select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role, description')
+    .eq('org_id', orgId)
+    .or('stage_code_2.is.null,stage_code_2.eq.Percentage Allocation')
+    .or('offset_role.is.null,offset_role.neq.offset')
+    .or(`transaction_type.is.null,transaction_type.not.in.(${NON_ALLOCATABLE_LIST})`)
+}
+
+// ── Server-side aggregate fast path ──────────────────────────────────────────
+
+interface FundTotalsRow  { category_id: string | null; stage_code_1: string | null; seed_in: number; seed_out: number; seed_out_count: number; sav_in: number; sav_out: number; pct_out: number }
+interface SeedTargetRow  { category_id: string | null; stage_code_1: string | null; label: string; total: number; entry_count: number; latest: string | null }
+
+// Set to false the first time the RPCs come back missing, so a database that
+// has not had 20260807000003 applied pays the failed round-trip once per page
+// load rather than on every call.
+let aggregateRpcAvailable = true
+
+async function fetchServerAggregates(orgId: string): Promise<{ totals: FundTotalsRow[]; targets: SeedTargetRow[] } | null> {
+  if (!aggregateRpcAvailable) return null
+  const [totalsRes, targetsRes] = await Promise.all([
+    supabase.rpc('org_category_fund_totals', { p_org_id: orgId }),
+    supabase.rpc('org_seed_target_totals',   { p_org_id: orgId }),
+  ])
+  if (totalsRes.error || targetsRes.error) {
+    aggregateRpcAvailable = false
+    return null
+  }
+  return {
+    totals:  (totalsRes.data  ?? []) as FundTotalsRow[],
+    targets: (targetsRes.data ?? []) as SeedTargetRow[],
+  }
+}
+
+// ── Shared result cache ──────────────────────────────────────────────────────
+//
+// Four pages — Category Accounts, Regular Funds, Savings Funds, Designated
+// Gifts — each call computeFundBuckets on mount. Without this they re-ran the
+// whole fetch on every tab switch. The key carries the transaction-sync
+// versions, so any write that bumps one invalidates the cache immediately; the
+// TTL only bounds staleness from writes that bump nothing (a category rename,
+// an opening-balance edit), both of which also call invalidateFundBuckets().
+
+const CACHE_TTL_MS = 15_000
+
+let cache: { key: string; at: number; promise: Promise<FundBuckets> } | null = null
+
+function cacheKey(orgId: string): string {
+  const s = useTransactionSyncStore.getState()
+  return `${orgId}|${s.inflowVersion}|${s.outflowVersion}|${s.intraflowVersion}`
+}
+
+/** Drop the shared cache — call after any write that does not bump a sync version. */
+export function invalidateFundBuckets(): void {
+  cache = null
+}
+
+export function computeFundBuckets(orgId: string): Promise<FundBuckets> {
+  const key = cacheKey(orgId)
+  if (cache && cache.key === key && Date.now() - cache.at < CACHE_TTL_MS) return cache.promise
+
+  const promise = loadFundBuckets(orgId)
+  const entry = { key, at: Date.now(), promise }
+  cache = entry
+  // Never cache a failure: a transient network error would otherwise be served
+  // to the next three pages for the rest of the TTL.
+  promise
+    .then(r => { if (r.error && cache === entry) cache = null })
+    .catch(() => { if (cache === entry) cache = null })
+  return promise
+}
+
+async function loadFundBuckets(orgId: string): Promise<FundBuckets> {
   // Ensure allocation configs/groups are available (cached across calls).
   const store = useAllocationStore.getState()
   if (!store.loaded && !store.loading) await store.fetch()
   const { configs, groups } = useAllocationStore.getState()
 
-  const [seedRes, seedOutRes, savInRes, savOutRes, allInflowRes, cobRes, intraFlowRes, pctOutRes, incomeTypeRes] = await Promise.all([
-    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount, date, specific_seed_description, description').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
-    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
-    fetchAllRows(() => supabase.from('inflow_transactions').select('date, amount, stage_code_2, allocation_config_id, income_type_id, transaction_type, offset_role, description').eq('org_id', orgId)),
+  const [aggregates, allInflowRes, cobRes, intraFlowRes, incomeTypeRes] = await Promise.all([
+    fetchServerAggregates(orgId),
+    fetchAllRows(() => percentageEligibleInflows(orgId)),
     supabase.from('category_opening_balances').select('budget_portion, amount, categories(name)').eq('org_id', orgId),
     fetchAllRows(() => supabase.from('intra_flows').select('account_from, from_category_id, account_from_stage2, account_to, to_category_id, account_to_stage2, total_amount, date').eq('org_id', orgId).eq('status', 'active')),
-    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).not('stage_code_2', 'eq', 'Specific Seed').not('stage_code_2', 'eq', 'Savings')),
     supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId),
   ])
+
+  // Fallback for a database without migration 20260807000003: pull the five
+  // aggregate row sets and let the aggregator sum them client-side, exactly as
+  // before. Same numbers, more data over the wire.
+  const raw = aggregates ? null : await fetchRawAggregateRows(orgId)
 
   // Every read is fatal. A failed query that degrades to an empty set renders a
   // complete, confident, wrong balance sheet: opening balances missing, internal
   // transfers missing, or special allocation rules mis-resolved — with nothing on
   // screen to distinguish it from a correct one. In a ledger a failed read is an
   // error, never an empty result.
-  const fatal = seedRes.error || seedOutRes.error || savInRes.error || savOutRes.error
-    || allInflowRes.error || pctOutRes.error
+  const fatal = allInflowRes.error || raw?.error
     || cobRes.error || intraFlowRes.error || incomeTypeRes.error
   if (fatal) return { byCategory: new Map(), seedTargets: new Map(), error: fatal.message }
 
@@ -245,18 +378,90 @@ export async function computeFundBuckets(orgId: string): Promise<FundBuckets> {
   }))
 
   const { byCategory, seedTargets } = aggregateFundBuckets({
-    seedInflows:  byFund(seedRes.data)     as unknown as FundBucketInputs['seedInflows'],
-    seedOutflows: byFund(seedOutRes.data)  as unknown as FundBucketInputs['seedOutflows'],
-    savInflows:   byFund(savInRes.data)    as unknown as FundBucketInputs['savInflows'],
-    savOutflows:  byFund(savOutRes.data)   as unknown as FundBucketInputs['savOutflows'],
+    // Fast path and fallback are mutually exclusive — exactly one of these
+    // supplies the seed / savings / percentage-outflow figures.
+    ...(aggregates
+      ? { preAggregated: foldServerAggregates(aggregates, namesById) }
+      : {
+          seedInflows:  byFund(raw!.seedIn.data)   as unknown as FundBucketInputs['seedInflows'],
+          seedOutflows: byFund(raw!.seedOut.data)  as unknown as FundBucketInputs['seedOutflows'],
+          savInflows:   byFund(raw!.savIn.data)    as unknown as FundBucketInputs['savInflows'],
+          savOutflows:  byFund(raw!.savOut.data)   as unknown as FundBucketInputs['savOutflows'],
+          pctOutflows:  byFund(raw!.pctOut.data)   as unknown as FundBucketInputs['pctOutflows'],
+        }),
     allInflows:   (allInflowRes.data ?? []) as FundBucketInputs['allInflows'],
     openingBalances,
     intraFlows:   intraByFund as unknown as FundBucketInputs['intraFlows'],
-    pctOutflows:  byFund(pctOutRes.data)   as unknown as FundBucketInputs['pctOutflows'],
     incomeTypeGroup,
     configs,
     groups,
   })
 
   return { byCategory, seedTargets, error: null }
+}
+
+/**
+ * Collapses the server's raw (category_id, stage_code_1) groups onto resolved
+ * fund names. Two server rows can land on the same fund — one carrying a
+ * category_id, one an older text snapshot from before the backfill — so they
+ * are summed rather than overwritten.
+ *
+ * The "Withdrawal" seed target is reconstructed here from the outflow totals,
+ * mirroring the per-row `addSeed(cat, 'Withdrawal', -net, '')` on the raw path:
+ * total is the negated sum, count the number of underlying rows, date empty.
+ */
+function foldServerAggregates(
+  aggregates: { totals: FundTotalsRow[]; targets: SeedTargetRow[] },
+  namesById:  Map<string, string>,
+): { totals: PreAggregatedFundTotals[]; seedTargets: PreAggregatedSeedTarget[] } {
+  const fundOf = (r: { category_id: string | null; stage_code_1: string | null }) =>
+    resolveFundName(namesById, r.category_id, r.stage_code_1) || '(Uncategorised)'
+
+  const totals = new Map<string, PreAggregatedFundTotals>()
+  const seedTargets: PreAggregatedSeedTarget[] = []
+
+  for (const r of aggregates.totals) {
+    const category = fundOf(r)
+    const t = totals.get(category)
+      ?? { category, seedIn: 0, seedOut: 0, savIn: 0, savOut: 0, pctOut: 0 }
+    t.seedIn  += Number(r.seed_in)
+    t.seedOut += Number(r.seed_out)
+    t.savIn   += Number(r.sav_in)
+    t.savOut  += Number(r.sav_out)
+    t.pctOut  += Number(r.pct_out)
+    totals.set(category, t)
+
+    const outCount = Number(r.seed_out_count)
+    if (outCount > 0) {
+      seedTargets.push({ category, label: 'Withdrawal', total: -Number(r.seed_out), count: outCount, latest: '' })
+    }
+  }
+
+  for (const r of aggregates.targets) {
+    seedTargets.push({
+      category: fundOf(r),
+      label:    r.label,
+      total:    Number(r.total),
+      count:    Number(r.entry_count),
+      latest:   r.latest ?? '',
+    })
+  }
+
+  return { totals: [...totals.values()], seedTargets }
+}
+
+/**
+ * The five per-transaction scans the RPCs replace. Only reached on a database
+ * without migration 20260807000003.
+ */
+async function fetchRawAggregateRows(orgId: string) {
+  const [seedIn, seedOut, savIn, savOut, pctOut] = await Promise.all([
+    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount, date, specific_seed_description, description').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Specific Seed')),
+    fetchAllRows(() => supabase.from('inflow_transactions').select('stage_code_1, category_id, amount').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).eq('stage_code_2', 'Savings')),
+    fetchAllRows(() => supabase.from('outflow_transactions').select('stage_code_1, category_id, amount_disbursed, offset_role').eq('org_id', orgId).not('stage_code_2', 'eq', 'Specific Seed').not('stage_code_2', 'eq', 'Savings')),
+  ])
+  const error = seedIn.error || seedOut.error || savIn.error || savOut.error || pctOut.error
+  return { seedIn, seedOut, savIn, savOut, pctOut, error }
 }

@@ -11,6 +11,7 @@ import {
   describeCategoryReferences,
   resolveCategoryId,
 } from '../utils/categoryReferences'
+import { invalidateFundBuckets } from '../utils/fundBuckets'
 
 const BULK_CHUNK_SIZE = 500
 
@@ -709,6 +710,9 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
       const orgId   = useOrgStore.getState().orgId
       if (oldName && orgId && oldName !== input.name) {
         await cascadeCategoryRename(orgId, oldName, input.name)
+        // The shared fund-bucket cache is keyed by fund name; a rename changes
+        // every key without bumping a transaction-sync version.
+        invalidateFundBuckets()
       }
 
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })

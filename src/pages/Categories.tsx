@@ -13,6 +13,7 @@ import {
   type Category, type CategoryGroup, type CategoryOpeningBalance, type BudgetPortion,
 } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
+import { invalidateFundBuckets } from '../utils/fundBuckets'
 import {
   useAddCategory,
   useUpdateCategory,
@@ -224,6 +225,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
         for (const row of validRows) {
           await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount), orgId)
         }
+        // Opening balances feed the fund buckets but bump no transaction-sync
+        // version, so the shared cache has to be dropped explicitly.
+        invalidateFundBuckets()
       } catch (obErr) {
         const msg = obErr instanceof Error ? obErr.message : String(obErr)
         console.error('[CategoryModal] ob upsert failed', msg)
