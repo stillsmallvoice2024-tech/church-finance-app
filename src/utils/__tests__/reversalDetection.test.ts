@@ -119,6 +119,15 @@ describe('detectReversalsWithinFile', () => {
     expect(r.unpaired).toEqual([])
   })
 
+  it('pairs opposite-column reversals whose ref carries a marker prefix (REV., RVRSAL, REVERSE)', () => {
+    for (const prefix of ['REV. ', 'RVRSAL-', 'REVERSE ', 'REVERSAL:', 'RVSL_', '']) {
+      const rows = [row(0, 'outflow', 600, 'TXN123'), row(1, 'inflow', 600, `${prefix}TXN123`)]
+      const merged = [['', '', '', '600', 'TXN123'], ['', '', '600', '', `${prefix}TXN123`]]
+      const r = detectReversalsWithinFile(rows, merged, IDX)
+      expect(r.reversalRis).toEqual(new Set([0, 1]))
+    }
+  })
+
   it('tolerates floating point noise in the amount match', () => {
     const rows = [row(0, 'outflow', 600.0001, 'REF6'), row(1, 'inflow', 600.0002, 'REF6')]
     const merged = [['', '', '', '600.0001', 'REF6'], ['', '', '600.0002', '', 'REF6']]

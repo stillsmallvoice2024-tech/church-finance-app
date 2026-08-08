@@ -54,6 +54,16 @@ export interface ReversalDetection {
 
 const AMOUNT_EPSILON = 0.005
 
+// A reversal often carries the SAME transaction id as the original, but with a
+// marker prefix on the reference/description text ("REV.", "RVRSAL",
+// "REVERSE", "REVERSAL", "RVSL") — or, just as often, no marker at all. Case 2
+// pairing must match these to the original even though the raw text differs,
+// so grouping is done on this stripped "core" reference, not the raw one.
+const REVERSAL_MARKER = /^(?:rev(?:ersal|ersed|erse)?|rvrsal|rvsl)[\s.:\-_]*/i
+function coreRef(ref: string): string {
+  return ref.replace(REVERSAL_MARKER, '').trim() || ref
+}
+
 /**
  * Pairs reversals within a single statement. Two passes per reference group:
  * first same-kind rows separated only by sign (case 1 — the debit column
@@ -74,7 +84,7 @@ export function detectReversalsWithinFile(
   const byRef = new Map<string, ImportRow[]>()
   for (const r of rows) {
     if (!r.ref) continue
-    const key = normalizeId(r.ref)
+    const key = coreRef(normalizeId(r.ref))
     if (!key) continue
     const group = byRef.get(key)
     if (group) group.push(r); else byRef.set(key, [r])
@@ -114,7 +124,7 @@ export function detectReversalsWithinFile(
 
   for (const r of rows) {
     if (paired.has(r.ri) || !r.ref) continue
-    const key = normalizeId(r.ref)
+    const key = coreRef(normalizeId(r.ref))
     if (!key) continue
     const sign = rawSign.get(r.ri) ?? 0
     if (sign < 0) {
