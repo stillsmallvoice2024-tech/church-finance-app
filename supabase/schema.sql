@@ -925,14 +925,49 @@ create table public.dynamic_report_snapshots (
 );
 
 -- ── Currencies ───────────────────────────────────────────────────────────────
+-- Org-scoped: each organisation owns its own currency list. Surrogate id PK
+-- (not code) so the table behaves like every other org-scoped table in the
+-- backup/restore registry; uniqueness of the code is per organisation.
 create table public.currencies (
-  code       text    primary key,
+  id         uuid    primary key default gen_random_uuid(),
+  org_id     uuid    not null references public.organizations(id) on delete cascade,
+  code       text    not null,
   name       text    not null,
   symbol     text    not null default '',
   flag       text,
   is_active  boolean not null default true,
-  sort_order integer not null default 99
+  sort_order integer not null default 99,
+  unique (org_id, code)
 );
+create index currencies_org_id_idx on public.currencies (org_id);
+
+-- Default currency list handed to every new organisation.
+-- Mirrors DEFAULT_CURRENCIES in src/hooks/useCurrencies.ts.
+create or replace function public.seed_default_currencies(p_org_id uuid)
+returns void language sql security definer set search_path = public as $$
+  insert into public.currencies (org_id, code, name, symbol, flag, is_active, sort_order)
+  select p_org_id, d.code, d.name, d.symbol, d.flag, true, d.sort_order
+  from (values
+    ('NGN', 'Nigerian Naira', '₦', '🇳🇬', 0),
+    ('USD', 'US Dollar',      '$', '🇺🇸', 1),
+    ('GBP', 'British Pound',  '£', '🇬🇧', 2),
+    ('EUR', 'Euro',           '€', '🇪🇺', 3),
+    ('CNY', 'Chinese Yuan',   '¥', '🇨🇳', 4)
+  ) as d(code, name, symbol, flag, sort_order)
+  on conflict (org_id, code) do nothing;
+$$;
+
+create or replace function public.seed_currencies_on_org_insert()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public.seed_default_currencies(new.id);
+  return new;
+end $$;
+
+drop trigger if exists trg_seed_currencies_on_org_insert on public.organizations;
+create trigger trg_seed_currencies_on_org_insert
+  after insert on public.organizations
+  for each row execute function public.seed_currencies_on_org_insert();
 
 -- ── User Preferences ──────────────────────────────────────────────────────────
 create table public.user_preferences (
@@ -1749,14 +1784,17 @@ grant execute on function public.save_dynamic_report_blocks(uuid, jsonb) to auth
 
 -- ── currencies ─────────────────────────────────────────────────────────────────
 
+-- Org-scoped throughout: is_admin() is "admin in ANY active org", so using it
+-- here would let an admin of one organisation rewrite every other tenant's
+-- currency list.
 create policy "currencies_select" on public.currencies
-  for select using (auth.role() = 'authenticated');
+  for select using (public.is_org_member(org_id));
 create policy "currencies_insert" on public.currencies
-  for insert with check (public.is_admin());
+  for insert with check (public.is_org_admin(org_id));
 create policy "currencies_update" on public.currencies
-  for update using (public.is_admin());
+  for update using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
 create policy "currencies_delete" on public.currencies
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── user_preferences ───────────────────────────────────────────────────────────
 
@@ -4084,10 +4122,7 @@ WITH seed (table_key, insert_order, conflict_column, org_scoped, delete_in_repla
   VALUES
     -- Configuration
     ('organizations'::text,               0::integer, 'id'::text,   false, false, 'update'::text),
-    -- currencies is a GLOBAL table (PK code, no org_id). It is deliberately
-    -- never deleted here: an unscoped wipe would clear the currency list for
-    -- every tenant on the instance, not just the one being restored.
-    ('currencies',                        1, 'code', false, false, 'update'),
+    ('currencies',                        1, 'id',   true,  true,  'update'),
     ('category_groups',                   2, 'id',   true,  true,  'update'),
     ('categories',                        3, 'id',   true,  true,  'update'),
     ('category_opening_balances',         4, 'id',   true,  true,  'update'),

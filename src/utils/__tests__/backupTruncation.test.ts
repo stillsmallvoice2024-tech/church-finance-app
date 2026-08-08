@@ -285,11 +285,11 @@ describe('fetchTableData completeness assertion', () => {
 // ── 4. Non-`id` primary keys ──────────────────────────────────────────────────
 
 describe('fetchTableData stable key', () => {
-  it('pages currencies by its real PK (code), not id', async () => {
-    table('currencies', rowsFor(1200).map(r => ({ code: r.code })), { missingColumn: 'id' })
-    const { rows } = await fetchTableData('currencies', undefined, undefined, { stableKey: 'code' })
+  it('pages by the supplied stable key when the table has no id column', async () => {
+    table('keyed_table', rowsFor(1200).map(r => ({ code: r.code })), { missingColumn: 'id' })
+    const { rows } = await fetchTableData('keyed_table', undefined, undefined, { stableKey: 'code' })
     expect(rows).toHaveLength(1200)
-    expect(calls.orders.filter(o => o.table === 'currencies').every(o => o.column === 'code')).toBe(true)
+    expect(calls.orders.filter(o => o.table === 'keyed_table').every(o => o.column === 'code')).toBe(true)
   })
 
   it('falls back to one unordered page when the table has no stable key', async () => {
@@ -500,7 +500,6 @@ describe('restore atomicity (regression: non-atomic destructive restore)', () =>
 
 describe('replace mode never issues an unscoped delete', () => {
   it('excludes tables with no org_id from the delete set', async () => {
-    table('currencies', rowsFor(5))
     table('organizations', rowsFor(3))
     table('inflow_transactions', rowsFor(2))
 
@@ -510,11 +509,22 @@ describe('replace mode never issues an unscoped delete', () => {
       ORG,
     )
 
-    // Both are global/cross-tenant: an unscoped DELETE would clear them for
-    // every organisation on the instance.
-    expect(calls.deletes).not.toContain('currencies')
+    // organizations has no org_id column: an unscoped DELETE would clear the
+    // row for every organisation on the instance.
     expect(calls.deletes).not.toContain('organizations')
-    expect(db.currencies.rows).toHaveLength(5)
     expect(db.organizations.rows).toHaveLength(3)
+  })
+
+  it('deletes currencies org-scoped, now that it carries an org_id', async () => {
+    table('currencies', rowsFor(5))
+    table('inflow_transactions', rowsFor(2))
+
+    await restoreFromBackup(
+      backupOf({ inflow_transactions: rowsFor(2) }),
+      { mode: 'replace', restoreUnmanaged: false, acknowledgeDataLoss: true },
+      ORG,
+    )
+
+    expect(calls.deletes).toContain('currencies')
   })
 })

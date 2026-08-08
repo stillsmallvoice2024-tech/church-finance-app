@@ -478,7 +478,7 @@ describe('backupRestore explicit org scoping', () => {
   })
 
   it('non-org tables are orgScoped: false', () => {
-    const nonOrgTables = ['organizations', 'currencies']
+    const nonOrgTables = ['organizations']
     nonOrgTables.forEach(t => {
       const idx = code.indexOf(`key: '${t}'`)
       const block = code.slice(idx, idx + 300)
