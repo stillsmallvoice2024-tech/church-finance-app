@@ -25,7 +25,8 @@ import {
   type RowResolverState,
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
-import { fetchExistingRowCounts } from '../../utils/dedupQuery'
+import { fetchExistingRowCounts, fetchRowsByRef, type ExistingRefRow } from '../../utils/dedupQuery'
+import { detectReversalsWithinFile } from '../../utils/reversalDetection'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
 import { nextOccurrence, rowFingerprint } from '../../utils/refOccurrence'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
@@ -428,6 +429,18 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const [rowStageCodes,   setRowStageCodes]   = useState<Record<number, { s1: string; s2: string }>>({})
   const [rowTxnTypes,     setRowTxnTypes]     = useState<Record<number, string>>({})
   const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
+  // Rows auto-tagged Reversal by detectReversalsWithinFile / the cross-import
+  // lookup, so the Step 4 UI can badge them "Auto-detected" without pretending
+  // the user chose it — they can still change rowTxnTypes for any of these.
+  const [autoReversalRis, setAutoReversalRis] = useState<Set<number>>(new Set())
+  // Already-stored rows whose reversal partner just arrived in THIS import.
+  // Read-only at Step 3→4 (detection only); the actual retag UPDATE and the
+  // "already imported" note only fire once the user runs the import, so a
+  // preview never writes to a row the user hasn't committed to yet.
+  const [crossImportReversalMatches, setCrossImportReversalMatches] = useState<
+    Array<{ ri: number; storedId: string; storedTable: 'inflow_transactions' | 'outflow_transactions'; storedDate?: string }>
+  >([])
+  const [reversalNotes, setReversalNotes] = useState<string[]>([])
   const [rowOutflowTypes, setRowOutflowTypes] = useState<Record<number, string>>({})
   const [batchTxnType,    setBatchTxnType]    = useState('')
   const [batchOffsetRole, setBatchOffsetRole] = useState('')
@@ -702,6 +715,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setDateFormatDetection(null)
     setDateFormatOverridden(false)
     detectedForSheetRef.current = null
+    setAutoReversalRis(new Set())
+    setCrossImportReversalMatches([])
+    setReversalNotes([])
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
@@ -1085,6 +1101,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setDupCheckLoading(true)
     setDupCheckError(null)
 
+    const bankName = internalBank?.name ?? null
+    const dupOrgId = useOrgStore.getState().orgId
+    if (!dupOrgId) { setDupCheckError('No active organisation.'); setDupCheckLoading(false); return }
+
     try {
       // Column indices are derived ONCE here and carried on the row model.
       // They were previously recomputed at seven independent sites.
@@ -1145,6 +1165,56 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
       }
 
+      // ── Reversal detection ──────────────────────────────────────────────
+      // A reversal carries the same bank reference as the transaction it
+      // undoes, and shows up one of two ways: the same column twice with
+      // opposite signs, or once in each column at the same amount. Caught
+      // here so "Reversal" is pre-selected before the user ever reaches the
+      // classification step — never hidden, always overridable per row there.
+      const { reversalRis, lonelyNegative, unpaired } = detectReversalsWithinFile(rows, merged, idx)
+      const detectedTxnTypes: Record<number, string> = {}
+      for (const ri of reversalRis) detectedTxnTypes[ri] = 'reversal'
+
+      // Rows this file can't explain alone: a lone negative-signed row (its
+      // original may be sitting in the database from an earlier import) or an
+      // unpaired positive row (its reversal, or the transaction it reverses,
+      // may already be stored under the opposite table). One batched,
+      // read-only lookup per direction — nothing is written here.
+      const crossMatches: typeof crossImportReversalMatches = []
+      {
+        const lonelyByKind = { inflow: lonelyNegative.filter(c => c.kind === 'inflow'), outflow: lonelyNegative.filter(c => c.kind === 'outflow') }
+        const unpairedByKind = { inflow: unpaired.filter(c => c.kind === 'inflow'), outflow: unpaired.filter(c => c.kind === 'outflow') }
+
+        const [sameInflow, sameOutflow, oppForInflow, oppForOutflow] = await Promise.all([
+          fetchRowsByRef('inflow_transactions',  'transaction_ref', 'amount',           lonelyByKind.inflow.map(c => c.ref),  bankName, dupOrgId),
+          fetchRowsByRef('outflow_transactions', 'transaction_id',  'amount_disbursed', lonelyByKind.outflow.map(c => c.ref), bankName, dupOrgId),
+          fetchRowsByRef('outflow_transactions', 'transaction_id',  'amount_disbursed', unpairedByKind.inflow.map(c => c.ref), bankName, dupOrgId),
+          fetchRowsByRef('inflow_transactions',  'transaction_ref', 'amount',           unpairedByKind.outflow.map(c => c.ref), bankName, dupOrgId),
+        ])
+        const findMatch = (rowsFound: ExistingRefRow[], ref: string, amount: number) =>
+          rowsFound.find(r => r.ref === ref && Math.abs(r.amount - amount) <= 0.005 && r.transaction_type !== 'reversal')
+
+        for (const c of lonelyByKind.inflow) {
+          const m = findMatch(sameInflow, c.ref, c.amount)
+          if (m) crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'inflow_transactions', storedDate: m.date })
+        }
+        for (const c of lonelyByKind.outflow) {
+          const m = findMatch(sameOutflow, c.ref, c.amount)
+          if (m) crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'outflow_transactions', storedDate: m.date })
+        }
+        for (const c of unpairedByKind.inflow) {
+          const m = findMatch(oppForInflow, c.ref, c.amount)
+          if (m) { detectedTxnTypes[c.ri] = 'reversal'; crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'outflow_transactions', storedDate: m.date }) }
+        }
+        for (const c of unpairedByKind.outflow) {
+          const m = findMatch(oppForOutflow, c.ref, c.amount)
+          if (m) { detectedTxnTypes[c.ri] = 'reversal'; crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'inflow_transactions', storedDate: m.date }) }
+        }
+      }
+      setRowTxnTypes(prev => ({ ...detectedTxnTypes, ...prev }))
+      setAutoReversalRis(new Set(Object.keys(detectedTxnTypes).map(Number)))
+      setCrossImportReversalMatches(crossMatches)
+
       // Legacy per-row maps are derived from the model so the existing Step 4
       // and runImport code paths keep working while they are migrated over.
       const newInflowIds:  Record<number, string> = {}
@@ -1174,9 +1244,6 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // in a different bank is not treated as a duplicate.
       // Chunked queries + thrown errors — a large ID list (long fallback hashes)
       // must never overflow the URL or silently report every row as new.
-      const bankName = internalBank?.name ?? null
-      const dupOrgId = useOrgStore.getState().orgId
-      if (!dupOrgId) { setDupCheckError('No active organisation.'); return }
 
       // Counts keyed on the WHOLE row, not the reference. A bank posts a
       // transfer, its fee and the VAT on that fee under one Session ID, so
@@ -1495,7 +1562,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         // Rows already in the database were excluded from Step 4 configuration.
         if (duplicateRis.has(ri)) { skipped++; continue }
 
-        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx])      : 0
+        // A negative credit must not be silently dropped — see buildImportRows.ts's
+        // matching comment. Kept as `creditSigned` for the reversal precheck at
+        // Step 3→4 (which reads the raw sign itself), everything downstream here
+        // uses the normalised positive `credit`.
+        const creditSigned = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
+        const credit = Math.abs(creditSigned)
         const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
         const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
                          ? String(raw[descIdx]).trim() : null
@@ -1505,7 +1577,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         const rowTxnType = rowTxnTypes[ri] ?? ''
         const origId  = rowOrigTxnIds[ri] ?? ''
 
-        if (credit > 0) {
+        if (creditSigned !== 0) {
           const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
@@ -1764,6 +1836,35 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
       }
 
+      // Reversal retag — the read-only half ran at Step 3→4; this is the only
+      // part of reversal detection allowed to write, and only now that the
+      // paired new row has actually been committed. A row skipped as a
+      // pre-insert duplicate never became a stored reversal, so its match is
+      // dropped rather than tagging an original for a row that didn't land.
+      if (crossImportReversalMatches.length > 0) {
+        const notes: string[] = []
+        for (const m of crossImportReversalMatches) {
+          if (duplicateRis.has(m.ri)) continue
+          // No .neq('transaction_type', 'reversal') filter here: in Postgres a
+          // NULL column fails <> comparisons too, and most stored rows have no
+          // transaction_type set at all — that filter would have silently
+          // excluded exactly the common case. findMatch already only selected
+          // rows that were not already 'reversal', so this is safe to run
+          // unconditionally on the ids it returned.
+          const { error: retagErr, count } = await supabase
+            .from(m.storedTable)
+            .update({ transaction_type: 'reversal' }, { count: 'exact' })
+            .eq('id', m.storedId).eq('org_id', orgId)
+          if (!retagErr && count) {
+            notes.push(
+              `Original transaction${m.storedDate ? ` from ${m.storedDate}` : ''} (already in your records) was ` +
+              `tagged Reversal to match the reversal found in this statement.`
+            )
+          }
+        }
+        if (notes.length > 0) setReversalNotes(notes)
+      }
+
       importCompletedRef.current = true
       setResult({
         imported, skipped, errors, fallbackIdCount, collisions, raceDuplicates,
@@ -1999,7 +2100,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       rowIncomeTypes, incomeTypes,
       allocConfigs, allocGroups,
       duplicateRis, precomputedInflowIds, precomputedOutflowIds,
-      precomputedInflowOcc, precomputedOutflowOcc])
+      precomputedInflowOcc, precomputedOutflowOcc, crossImportReversalMatches])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -3078,6 +3179,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                       className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                       {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
+                                    {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                      <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                    )}
                                   </div>
                                   {(txnType === 'refund' || txnType === 'reversal') && (
                                     <div className="px-3 pb-2 flex items-center gap-2">
@@ -3259,6 +3363,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                           className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                           {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
+                                        {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                          <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                        )}
                                       </div>
                                       {/* Original Txn ID */}
                                       {(txnType === 'refund' || txnType === 'reversal') && (
@@ -3697,6 +3804,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     className="text-xs px-2 py-1 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-primary/30 bg-white w-full">
                                     {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                   </select>
+                                  {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                      <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                    )}
                                 </div>
                                 {outflowTypeOptions.length > 0 && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
@@ -3895,6 +4005,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                       </select>
+                                      {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                          <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                        )}
                                     </div>
                                     {/* Original Txn ID */}
                                     {(txnType === 'refund' || txnType === 'reversal') && (
@@ -4114,6 +4227,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       this run repeated an earlier one. Nothing was duplicated.
                     </div>
                   )}
+                  {reversalNotes.map((note, i) => (
+                    <div key={i} className="text-blue-600 dark:text-blue-400">↻ {note}</div>
+                  ))}
                 </div>
                 {(() => {
                   const failedCount = (result.failedRows?.inflows.length ?? 0) + (result.failedRows?.outflows.length ?? 0)

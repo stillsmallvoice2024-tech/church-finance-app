@@ -176,17 +176,24 @@ export async function buildImportRows(
     const ref    = idx.ref >= 0 && raw[idx.ref] != null && raw[idx.ref] !== ''
                      ? normalizeId(String(raw[idx.ref])) || null : null
 
-    if (credit > 0) {
+    // A negative credit silently vanished here — the row was never built, so
+    // it never reached the reversal detector, the preview or the insert. The
+    // sign itself is one of the two ways a bank marks a reversal (the other
+    // is the same amount posting once in each column); amounts are still
+    // normalised to a positive value, only the row itself is no longer
+    // dropped just for carrying a sign.
+    if (credit !== 0) {
+      const amount = Math.abs(credit)
       let txnId: string
       if (ref) {
         txnId = ref
       } else {
         // No suffixing: two rows hashing alike are identical rows, and
         // ref_occurrence is what separates them now.
-        txnId = await generateFallbackTransactionId(String(date), String(credit), desc, bankName)
+        txnId = await generateFallbackTransactionId(String(date), String(amount), desc, bankName)
       }
       rows.push({
-        ri, kind: 'inflow', date, amount: credit, description: desc, ref, txnId,
+        ri, kind: 'inflow', date, amount, description: desc, ref, txnId,
         isDuplicate: false, refOccurrence: 0, config: emptyRowConfig(), resolution: 'unresolved',
       })
     }
