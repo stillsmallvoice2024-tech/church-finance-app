@@ -602,6 +602,7 @@ create table public.inflow_transactions (
   created_at                timestamptz default now(),
   updated_at                timestamptz default now(),
   import_seq                bigint      generated always as identity,
+  import_batch_id           uuid,
   org_id                    uuid        not null default public.get_current_org_id()
                             references public.organizations(id) on delete set null
 );
@@ -642,6 +643,7 @@ create table public.outflow_transactions (
   created_at              timestamptz default now(),
   updated_at              timestamptz default now(),
   import_seq              bigint      generated always as identity,
+  import_batch_id         uuid,
   org_id                  uuid        not null default public.get_current_org_id()
                           references public.organizations(id) on delete set null
 );
@@ -865,6 +867,21 @@ create table public.report_templates (
   updated_at  timestamptz default now()
 );
 
+-- ── Import Batches ────────────────────────────────────────────────────────────
+-- One row per import run — lets the UI show/undo a specific run without
+-- scanning the transaction tables for stale ids.
+create table public.import_batches (
+  id           uuid        primary key default gen_random_uuid(),
+  org_id       uuid        not null references public.organizations(id) on delete cascade,
+  target_table text        not null,
+  file_name    text,
+  row_count    int         not null default 0,
+  status       text        not null default 'completed' check (status in ('completed', 'partial', 'undone')),
+  created_by   uuid        references public.profiles(id),
+  created_at   timestamptz not null default now(),
+  undone_at    timestamptz
+);
+
 -- ── Transaction Allocation Snapshots ─────────────────────────────────────────
 create table public.transaction_allocation_snapshots (
   id                uuid        primary key default gen_random_uuid(),
@@ -1005,6 +1022,7 @@ alter table public.audit_maintenance_log          enable row level security;
 alter table public.gdpr_erasure_requests          enable row level security;
 alter table public.category_opening_balances      enable row level security;
 alter table public.report_templates               enable row level security;
+alter table public.import_batches                 enable row level security;
 alter table public.transaction_allocation_snapshots enable row level security;
 alter table public.recalculation_logs             enable row level security;
 alter table public.dynamic_reports                enable row level security;
@@ -1603,6 +1621,15 @@ create policy "report_templates_update" on public.report_templates
 create policy "report_templates_delete" on public.report_templates
   for delete using (public.is_org_admin(org_id));
 
+-- ── import_batches ─────────────────────────────────────────────────────────────
+
+create policy "import_batches_select" on public.import_batches
+  for select using (public.is_org_member(org_id));
+create policy "import_batches_insert" on public.import_batches
+  for insert with check (public.is_org_finance_user(org_id));
+create policy "import_batches_update" on public.import_batches
+  for update using (public.is_org_finance_user(org_id));
+
 -- ── transaction_allocation_snapshots ──────────────────────────────────────────
 
 create policy "tas_select" on public.transaction_allocation_snapshots
@@ -1827,6 +1854,8 @@ create index if not exists idx_inflow_offset_role     on public.inflow_transacti
 create index if not exists idx_outflow_offset_role    on public.outflow_transactions(offset_role) where offset_role is not null;
 create index if not exists idx_inflow_deposit_group   on public.inflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_outflow_deposit_group  on public.outflow_transactions(deposit_group_id) where deposit_group_id is not null;
+create index if not exists inflow_transactions_import_batch_id_idx  on public.inflow_transactions(import_batch_id) where import_batch_id is not null;
+create index if not exists outflow_transactions_import_batch_id_idx on public.outflow_transactions(import_batch_id) where import_batch_id is not null;
 create index if not exists idx_categories_group       on public.categories(group_id);
 create index if not exists idx_invitations_token      on public.invitations(token);
 create index if not exists idx_outflow_department_id  on public.outflow_transactions(department_id);
@@ -1871,6 +1900,7 @@ create index if not exists idx_ledger_entries_org      on public.ledger_entries(
 create index if not exists idx_special_projects_org    on public.special_projects(org_id);
 create index if not exists idx_project_entries_org     on public.project_entries(org_id);
 create index if not exists idx_receipts_org            on public.receipts(org_id);
+create index if not exists idx_import_batches_org      on public.import_batches(org_id);
 create index if not exists idx_invitations_org         on public.invitations(org_id);
 create index if not exists idx_report_templates_org    on public.report_templates(org_id);
 create index if not exists idx_special_config_groups_org on public.special_config_groups(org_id);
