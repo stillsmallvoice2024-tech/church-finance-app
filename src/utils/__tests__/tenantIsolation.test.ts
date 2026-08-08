@@ -477,13 +477,13 @@ describe('backupRestore explicit org scoping', () => {
     })
   })
 
-  it('non-org tables are orgScoped: false', () => {
-    const nonOrgTables = ['organizations']
-    nonOrgTables.forEach(t => {
-      const idx = code.indexOf(`key: '${t}'`)
-      const block = code.slice(idx, idx + 300)
-      expect(block).toContain('orgScoped: false')
-    })
+  it('organizations is not a row-level backup/restore table', () => {
+    // Instance-wide (no org_id): exporting or upserting it as a row risks
+    // cross-org leakage / plan-column tampering. It must not appear in the
+    // managed registry at all — org identity is captured as a scalar
+    // snapshot (orgSettings) instead. (`currencies` is a normal org-scoped
+    // table — see #476 — and is expected to appear with key: 'currencies'.)
+    expect(code).not.toContain("key: 'organizations'")
   })
 })
 

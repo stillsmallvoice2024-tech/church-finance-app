@@ -33,16 +33,20 @@ export interface ManagedTableConfig {
   orgScoped?: boolean
 }
 
+/**
+ * `organizations` is deliberately NOT in this registry. It is the one
+ * instance-wide, not-org-scoped table left: exporting it means "every row
+ * the caller's RLS grants read on", which for a user in two orgs is both
+ * orgs' `organizations` row in one file — and restoring it from a
+ * hand-editable JSON file is an upsert of billing-adjacent columns
+ * (`plan_tier`, `stripe_*`) straight from user input. Org identity/settings
+ * are captured as a scalar snapshot in `_meta.orgSettings` instead (see
+ * `createBackup`) — informational only, never replayed on restore.
+ * (`currencies` is a normal org-scoped table below — see #476.)
+ */
+
 /** Ordered for restore: parents before children */
 export const MANAGED_TABLES: ManagedTableConfig[] = [
-  {
-    key: 'organizations', label: 'Organisations', module: 'Configuration',
-    restorePriority: 0, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id', orgScoped: false,
-    requiresMigration: false, sensitive: false, optional: false,
-    dependencies: [],
-    notes: 'Must be restored before org_members and all business tables',
-  },
   {
     key: 'currencies', label: 'Currencies', module: 'Configuration',
     restorePriority: 1, backupEnabled: true, restoreMode: 'replace',
@@ -279,10 +283,11 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
 export const BACKUP_TABLES = MANAGED_TABLES
 
 /** Delete order for replace mode — derived from registry, never stale.
- *  Excludes append-mode tables (they are never deleted) and non-org-scoped
- *  tables: `deleteFull` can only scope a DELETE by `org_id`, so a table without
- *  that column (`organizations`) would be wiped instance-wide for every tenant.
- *  Those are restored by upsert instead. */
+ *  Excludes append-mode tables (they are never deleted) and any remaining
+ *  non-org-scoped table: `deleteFull` can only scope a DELETE by `org_id`, so
+ *  a table without that column would be wiped instance-wide for every
+ *  tenant. (`organizations` is not in the registry at all — see the note
+ *  above MANAGED_TABLES. `currencies` is org-scoped and deletes normally.) */
 const DELETE_TABLES: string[] = [...MANAGED_TABLES]
   .reverse()
   .filter(t => t.restoreMode !== 'append' && t.backupEnabled && t.orgScoped !== false)
@@ -295,6 +300,14 @@ const SYSTEM_TABLE_BLACKLIST = new Set([
   'bank_schema_check',
 ])
 
+/**
+ * Never swept into the "unmanaged" raw export/restore path either. Without
+ * this it would silently reappear as an unmanaged table — undoing the point
+ * of pulling it out of MANAGED_TABLES above — the moment schema discovery is
+ * enabled.
+ */
+const NEVER_BACKUP_TABLES = new Set(['organizations'])
+
 export const SCHEMA_DISCOVERY_MIGRATION_SQL = `-- Enable automatic unmanaged table detection in backup system
 CREATE OR REPLACE VIEW public.schema_discovery_view
   WITH (security_invoker = true) AS
@@ -306,6 +319,19 @@ GRANT SELECT ON public.schema_discovery_view TO anon, authenticated;
 NOTIFY pgrst, 'reload schema';`
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Scalar, informational-only snapshot of org identity/settings. Deliberately
+ * NOT a raw table row: no `id` (nothing to upsert against), no plan/billing/
+ * Stripe columns. Never read back on restore — a human re-applies these by
+ * hand in Settings if needed after a restore into a fresh org.
+ */
+export interface OrgSettingsSnapshot {
+  name: string
+  timezone: string
+  defaultCurrency: string | null
+  fiscalYearStart: number
+}
 
 export interface BackupManifest {
   backupVersion: string
@@ -322,6 +348,8 @@ export interface BackupManifest {
   warnings: string[]
   schemaDiscoveryAvailable: boolean
   strictMode: boolean
+  /** Informational snapshot of the org this backup was taken from — not a restorable table. */
+  orgSettings?: OrgSettingsSnapshot
 }
 
 export interface BackupFileV2 {
@@ -435,7 +463,7 @@ async function discoverSchemaTables(): Promise<{ tables: string[]; available: bo
   if (error) return { tables: [], available: false }
 
   const all = (data as { table_name: string }[]).map(r => r.table_name)
-  const filtered = all.filter(t => !SYSTEM_TABLE_BLACKLIST.has(t))
+  const filtered = all.filter(t => !SYSTEM_TABLE_BLACKLIST.has(t) && !NEVER_BACKUP_TABLES.has(t))
   return { tables: filtered, available: true }
 }
 
@@ -629,6 +657,10 @@ export async function createBackup(
     warnings.push(...res.warnings)
   }
 
+  // 4. Org settings — scalar snapshot only, explicit safe column list. Never
+  // the raw row: that would carry plan_tier/stripe_* right back into the file.
+  const orgSettings = await fetchOrgSettingsSnapshot(orgId)
+
   return {
     _meta: {
       backupVersion: BACKUP_VERSION,
@@ -642,9 +674,27 @@ export async function createBackup(
       warnings,
       schemaDiscoveryAvailable:  discoveryAvailable,
       strictMode:                options?.strictMode ?? false,
+      orgSettings,
     },
     managed,
     unmanaged,
+  }
+}
+
+async function fetchOrgSettingsSnapshot(orgId?: string): Promise<OrgSettingsSnapshot | undefined> {
+  if (!orgId) return undefined
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('name, timezone, default_currency, fiscal_year_start')
+    .eq('id', orgId)
+    .single()
+  if (error || !data) return undefined
+  const row = data as { name: string; timezone: string; default_currency: string | null; fiscal_year_start: number }
+  return {
+    name: row.name,
+    timezone: row.timezone,
+    defaultCurrency: row.default_currency,
+    fiscalYearStart: row.fiscal_year_start,
   }
 }
 
