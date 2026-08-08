@@ -10,7 +10,7 @@ import { BALANCE_BROUGHT_FORWARD_TYPE } from '../utils/bankOpeningBalance'
 // (excluding synthetic balance_brought_forward inflow rows, which are the
 // same opening balance counted a second way).
 //
-// The sums come from `org_bank_balance_totals` (migration 20260807000002),
+// The sums come from `org_bank_balance_totals` (migration 20260807000003),
 // which returns one row per bank. Before that this hook downloaded the org's
 // entire inflow AND outflow history — every transaction ever recorded — purely
 // to add up a handful of numbers. The client-side pass is kept below as the

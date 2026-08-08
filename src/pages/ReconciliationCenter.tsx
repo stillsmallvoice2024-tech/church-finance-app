@@ -17,6 +17,7 @@ import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore } from '../store/orgStore'
 import { getOrgTimezone } from '../utils/timezones'
 import type { ReconciliationIssue } from '../utils/reconciliationEngine'
+import { ALL_RULES } from '../utils/reconciliationRules'
 import {
   type HealthStatus,
   type BankHealthSummary,
@@ -586,6 +587,18 @@ export default function ReconciliationCenter() {
                   </span>
                 )}
               </div>
+              {diag.partial && (
+                <div className="mt-3 rounded-lg border border-gray-300 bg-white/70 px-3 py-2">
+                  <p className="text-sm font-semibold text-gray-800">
+                    {diag.failedRuleNames.length} of {ALL_RULES.length} checks could not run
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    Did not run: {diag.failedRuleNames.join(', ')}. These accounts have
+                    <span className="font-semibold"> not</span> been fully verified — problems may
+                    exist that this run could not detect. Run the check again.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
                 {[
                   { label: 'Total Issues',     value: diag.totalIssues,        color: 'text-gray-800' },

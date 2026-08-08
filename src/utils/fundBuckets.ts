@@ -51,7 +51,7 @@ export interface FundBuckets {
 //
 // Five of the row sets below — seed in/out, savings in/out, percentage outflows
 // — are only ever summed. `org_category_fund_totals` and `org_seed_target_totals`
-// (migration 20260807000002) do that summing in Postgres and return one row per
+// (migration 20260807000003) do that summing in Postgres and return one row per
 // category / per seed target instead of one per transaction. Feeding those
 // totals in here produces byte-identical output to walking the raw rows, so the
 // two paths stay interchangeable: the raw arrays remain the fallback for a
@@ -257,7 +257,7 @@ interface FundTotalsRow  { category_id: string | null; stage_code_1: string | nu
 interface SeedTargetRow  { category_id: string | null; stage_code_1: string | null; label: string; total: number; entry_count: number; latest: string | null }
 
 // Set to false the first time the RPCs come back missing, so a database that
-// has not had 20260807000002 applied pays the failed round-trip once per page
+// has not had 20260807000003 applied pays the failed round-trip once per page
 // load rather than on every call.
 let aggregateRpcAvailable = true
 
@@ -329,19 +329,25 @@ async function loadFundBuckets(orgId: string): Promise<FundBuckets> {
     supabase.from('income_types').select('id, special_config_group_id').eq('org_id', orgId),
   ])
 
-  // Fallback for a database without migration 20260807000002: pull the five
+  // Fallback for a database without migration 20260807000003: pull the five
   // aggregate row sets and let the aggregator sum them client-side, exactly as
   // before. Same numbers, more data over the wire.
   const raw = aggregates ? null : await fetchRawAggregateRows(orgId)
 
+  // Every read is fatal. A failed query that degrades to an empty set renders a
+  // complete, confident, wrong balance sheet: opening balances missing, internal
+  // transfers missing, or special allocation rules mis-resolved — with nothing on
+  // screen to distinguish it from a correct one. In a ledger a failed read is an
+  // error, never an empty result.
   const fatal = allInflowRes.error || raw?.error
+    || cobRes.error || intraFlowRes.error || incomeTypeRes.error
   if (fatal) return { byCategory: new Map(), seedTargets: new Map(), error: fatal.message }
 
   const incomeTypeGroup = new Map<string, string | null>(
     (incomeTypeRes.data ?? []).map((r: Record<string, unknown>) => [r.id as string, (r.special_config_group_id as string | null) ?? null]),
   )
 
-  const openingBalances = (cobRes.error ? [] : (cobRes.data ?? [])).map(ob => ({
+  const openingBalances = (cobRes.data ?? []).map(ob => ({
     budget_portion: ob.budget_portion as string | null,
     amount:         Number(ob.amount),
     category:       (ob.categories as unknown as { name: string } | null)?.name ?? '',
@@ -365,7 +371,7 @@ async function loadFundBuckets(orgId: string): Promise<FundBuckets> {
     account_from?: string | null; from_category_id?: string | null
     account_to?:   string | null; to_category_id?:   string | null
   }
-  const intraByFund = ((intraFlowRes.error ? [] : (intraFlowRes.data ?? [])) as IntraSnapshot[]).map(r => ({
+  const intraByFund = ((intraFlowRes.data ?? []) as IntraSnapshot[]).map(r => ({
     ...r,
     account_from: resolveFundName(namesById, r.from_category_id, r.account_from),
     account_to:   resolveFundName(namesById, r.to_category_id,   r.account_to),
@@ -446,7 +452,7 @@ function foldServerAggregates(
 
 /**
  * The five per-transaction scans the RPCs replace. Only reached on a database
- * without migration 20260807000002.
+ * without migration 20260807000003.
  */
 async function fetchRawAggregateRows(orgId: string) {
   const [seedIn, seedOut, savIn, savOut, pctOut] = await Promise.all([

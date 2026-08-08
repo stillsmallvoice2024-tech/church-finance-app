@@ -19,7 +19,7 @@ in JavaScript. That work shipped in three stages:
 - **Stage 2** — moved five plain SUM/GROUP BY queries (Specific Seed in/out,
   Savings in/out, percentage-outflow totals, bank in/out) into three Postgres
   functions: `org_bank_balance_totals`, `org_category_fund_totals`,
-  `org_seed_target_totals` (migration `20260807000002_balance_aggregate_rpcs.sql`).
+  `org_seed_target_totals` (migration `20260807000003_balance_aggregate_rpcs.sql`).
   Every one of those was pure arithmetic — no rules, no dates, no
   interpretation — so moving them was low-risk.
 
