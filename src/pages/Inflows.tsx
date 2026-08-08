@@ -11,6 +11,7 @@ import { AddInflowModal }          from '../components/modals/AddInflowModal'
 import { EditFXInflowModal }       from '../components/modals/EditFXInflowModal'
 import { BulkEditInflowModal }     from '../components/modals/BulkEditInflowModal'
 import { MarkDepositedModal }      from '../components/modals/MarkDepositedModal'
+import { HelpTooltip }             from '../components/ui/HelpTooltip'
 import { DataControlsBar }         from '../components/ui/DataControlsBar'
 import { SortableHeader }          from '../components/ui/SortableHeader'
 import { PaginationBar }           from '../components/ui/PaginationBar'
@@ -59,6 +60,8 @@ import { SimpleShell } from '../components/ui/SimpleShell'
 import type { IncomeType } from '../hooks/useIncomeTypes'
 
 const DEFAULT_PAGE_SIZE = 25
+
+const MARK_DEPOSITED_HELP = 'Mark this cash as deposited — automatically creates the matching bank outflow for you, so you don’t have to enter it by hand.'
 
 const TXN_TYPE_LABELS: Record<string, string> = {
   refund:                   'Refund',
@@ -580,9 +583,12 @@ export default function Inflows() {
                     <div className="border-l border-gray-200/80 pl-4 min-w-0 flex items-center justify-end gap-0.5">
                       <ReceiptBadge entityType="inflow" entityId={row.id} />
                       {canWrite() && canMarkDeposited(row) && (
-                        <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
-                          <Landmark className="w-3.5 h-3.5" />
-                        </button>
+                        <span className="flex items-center">
+                          <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
+                            <Landmark className="w-3.5 h-3.5" />
+                          </button>
+                          <HelpTooltip content={MARK_DEPOSITED_HELP} iconSize="w-3 h-3" />
+                        </span>
                       )}
                       {canWrite() && !isProtected && (
                         <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">
@@ -716,9 +722,12 @@ export default function Inflows() {
                           <div className="flex items-center gap-1">
                             <ReceiptBadge entityType="inflow" entityId={row.id} />
                             {canWrite() && canMarkDeposited(row) && (
-                              <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
-                                <Landmark className="w-4 h-4" />
-                              </button>
+                              <span className="flex items-center">
+                                <button onClick={() => setDepositRow(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Mark Deposited" aria-label="Mark Deposited">
+                                  <Landmark className="w-4 h-4" />
+                                </button>
+                                <HelpTooltip content={MARK_DEPOSITED_HELP} iconSize="w-3 h-3" />
+                              </span>
                             )}
                             {canWrite() && !PROTECTED_TYPES.has(row.transaction_type ?? '') && (
                               <button onClick={() => openEdit(row)} className="touch-target p-1.5 rounded-lg text-gray-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit" aria-label="Edit">

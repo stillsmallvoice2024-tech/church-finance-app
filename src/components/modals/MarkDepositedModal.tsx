@@ -22,8 +22,9 @@ export function MarkDepositedModal({ open, onClose, onSuccess, inflow }: Props) 
   const { baseCurrencyCode } = useOrgCurrency()
   const { mutate, loading, error, reset } = useMarkCashDeposited()
 
-  // Non-Cash banks are the deposit destinations.
-  const targetBanks = useMemo(() => banks.filter(b => !b.is_system), [banks])
+  // Deposit destinations: real banks only — not the Cash bank itself, and
+  // not FX banks (a cash deposit is always in the org's base currency).
+  const targetBanks = useMemo(() => banks.filter(b => !b.is_system && !b.is_foreign_currency), [banks])
 
   const [date,         setDate]         = useState('')
   const [depositedBy,  setDepositedBy]  = useState('')
@@ -41,8 +42,9 @@ export function MarkDepositedModal({ open, onClose, onSuccess, inflow }: Props) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, inflow])
 
-  const bankName = bankChoice === CUSTOM_SENTINEL ? customBank.trim() : bankChoice
-  const canSubmit = !!inflow && !!date && depositedBy.trim().length > 0 && bankName.length > 0 && !loading
+  const bankName  = bankChoice === CUSTOM_SENTINEL ? customBank.trim() : bankChoice
+  const dateError = inflow && date && date < inflow.date ? 'Deposit date cannot be before the original transaction date.' : null
+  const canSubmit = !!inflow && !!date && !dateError && depositedBy.trim().length > 0 && bankName.length > 0 && !loading
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -98,12 +100,13 @@ export function MarkDepositedModal({ open, onClose, onSuccess, inflow }: Props) 
           />
         </Field>
 
-        <Field label="Deposit Date *">
+        <Field label="Deposit Date *" error={dateError ?? undefined}>
           <input
             type="date"
+            min={inflow.date}
             value={date}
             onChange={e => setDate(e.target.value)}
-            className={inputCls(false)}
+            className={inputCls(!!dateError)}
           />
         </Field>
 

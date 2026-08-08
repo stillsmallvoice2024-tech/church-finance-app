@@ -328,16 +328,20 @@ export function useMarkCashDeposited(): MutationHook<MarkCashDepositedInput, str
     try {
       const { data: source, error: fetchErr } = await supabase
         .from('inflow_transactions')
-        .select('id, amount, category_id, stage_code_1, deposit_group_id')
+        .select('id, date, amount, category_id, stage_code_1, deposit_group_id')
         .eq('id', input.inflowId)
         .single()
       if (fetchErr) throw fetchErr
       if (!source) throw new Error('Inflow record not found.')
       if (source.deposit_group_id) throw new Error('This inflow has already been marked as deposited.')
+      if (input.date < source.date) throw new Error('Deposit date cannot be before the original transaction date.')
 
       const groupId = crypto.randomUUID()
       const depositedBy = input.depositedBy.trim()
 
+      // The outflow is tagged 'bank_deposit' / offset_role 'root' so it surfaces
+      // on the dedicated Bank Deposits tracking page (BankMovement.tsx) the same
+      // way manually-entered deposits do.
       const { data: outflow, error: outErr } = await supabase
         .from('outflow_transactions')
         .insert({
@@ -349,8 +353,9 @@ export function useMarkCashDeposited(): MutationHook<MarkCashDepositedInput, str
           stage_code_1:       source.stage_code_1,
           description:        `Cash deposit — deposited by ${depositedBy}`,
           is_pending_deduction: false,
+          transaction_type:   'bank_deposit',
           deposit_group_id:   groupId,
-          offset_role:        'offset',
+          offset_role:        'root',
           created_by:         user.id,
           ...orgPayload(),
         })
@@ -361,7 +366,12 @@ export function useMarkCashDeposited(): MutationHook<MarkCashDepositedInput, str
 
       const { error: updErr } = await supabase
         .from('inflow_transactions')
-        .update({ deposit_group_id: groupId, offset_role: 'root' })
+        .update({
+          deposit_group_id:       groupId,
+          offset_role:            'offset',
+          root_transaction_id:    outflow.id,
+          root_transaction_table: 'outflow_transactions',
+        })
         .eq('id', input.inflowId)
       if (updErr) throw updErr
 
