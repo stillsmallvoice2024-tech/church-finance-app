@@ -25,9 +25,13 @@ import {
   type RowResolverState,
 } from '../../utils/configResolver'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
-import { fetchExistingTransactionIds } from '../../utils/dedupQuery'
+import { fetchExistingRowCounts, fetchRowsByRef, type ExistingRefRow } from '../../utils/dedupQuery'
+import { detectReversalsWithinFile } from '../../utils/reversalDetection'
 import { insertBatchResilient } from '../../utils/insertBatchResilient'
+import { nextOccurrence, rowFingerprint } from '../../utils/refOccurrence'
 import { parseDate, type DateFormat } from '../../utils/parseDate'
+import { auditDateColumn, DATE_SYMPTOM_TEXT } from '../../utils/dateAudit'
+import { detectDateFormat, type DetectionResult } from '../../utils/detectDateFormat'
 import { useTransactionSyncStore } from '../../store/transactionSyncStore'
 import { useToast } from '../../store/toastStore'
 import { SearchableSelect } from '../ui/SearchableSelect'
@@ -175,6 +179,17 @@ interface ParsedSheet {
   headers:  string[]
   rows:     unknown[][]
   rowCount: number
+  /**
+   * Same shape as `rows`, but read with `raw: false` so each cell is the text
+   * Excel actually displays — not the underlying number. Reading `rows` alone
+   * with `raw: true`/default hands back an Excel date cell as its serial
+   * number (a date like 18/07/2025 is really the number 45856 formatted for
+   * display), so a preview built from `rows` shows the treasurer a number they
+   * never saw in the file and no basis for choosing DD/MM vs MM/DD. `rows`
+   * itself is left untouched — parsing keeps using the exact values it always
+   * did; this is display-only.
+   */
+  displayRows: unknown[][]
 }
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
@@ -243,6 +258,14 @@ interface ImportResult {
   errors:          string[]
   fallbackIdCount: number
   collisions:      string[]
+  /**
+   * Rows the database rejected as already present, after they passed the dedup
+   * pre-check. Counted within `skipped`. A non-zero value means someone else
+   * imported the same rows between the pre-check and the write, or this import
+   * is a retry of one that actually landed — the outcome is correct either way,
+   * but it's worth surfacing so the user knows why the counts differ.
+   */
+  raceDuplicates?: number
   /**
    * Rows whose insert batch failed. A 10k-row import is ~40 sequential round
    * trips; without this a failure partway through left rows in the database
@@ -323,7 +346,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // Derived
   const sheet   = useMemo(() => sheets.find(s => s.name === selectedSheet) ?? null, [sheets, selectedSheet])
   const config  = targetTable ? TABLE_CONFIG[targetTable] : null
-  const preview = sheet?.rows.slice(0, 5) ?? []
+  // displayRows shows the text Excel actually renders (an Excel date cell as
+  // "18/07/2025", not the serial 45856 underneath it) — see ParsedSheet. Falls
+  // back to rows for PDF/CSV sources, where the two are identical anyway.
+  const preview = (sheet?.displayRows.length ? sheet.displayRows : sheet?.rows)?.slice(0, 5) ?? []
 
   // Allocation configs — load once so Step 4 and runImport can use them
   const { configs: allocConfigs, groups: allocGroups, fetch: fetchAllocConfigs, reload: reloadAllocConfigs, loaded: allocLoaded } = useAllocationStore()
@@ -388,7 +414,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
   // Date format (Phase A)
   const [dateFormat, setDateFormat] = useState<DateFormat>('DD/MM/YYYY')
-  
+  // What detectDateFormat found for the current sheet's date column, and
+  // whether the user has since overridden it — shown beside the radios so the
+  // choice is never a silent guess. Reset per sheet: `sheet.name` changes
+  // whenever a different file or a different tab within one file is selected.
+  const [dateFormatDetection, setDateFormatDetection] = useState<DetectionResult | null>(null)
+  const [dateFormatOverridden, setDateFormatOverridden] = useState(false)
+  const detectedForSheetRef = useRef<{ sheet: ParsedSheet | null; dateIdx: number } | null>(null)
+
   // FX currency (Phase B)
   const [fxCurrency, setFxCurrency] = useState('')
 
@@ -401,6 +434,18 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   const [rowStageCodes,   setRowStageCodes]   = useState<Record<number, { s1: string; s2: string }>>({})
   const [rowTxnTypes,     setRowTxnTypes]     = useState<Record<number, string>>({})
   const [rowOrigTxnIds,   setRowOrigTxnIds]   = useState<Record<number, string>>({})
+  // Rows auto-tagged Reversal by detectReversalsWithinFile / the cross-import
+  // lookup, so the Step 4 UI can badge them "Auto-detected" without pretending
+  // the user chose it — they can still change rowTxnTypes for any of these.
+  const [autoReversalRis, setAutoReversalRis] = useState<Set<number>>(new Set())
+  // Already-stored rows whose reversal partner just arrived in THIS import.
+  // Read-only at Step 3→4 (detection only); the actual retag UPDATE and the
+  // "already imported" note only fire once the user runs the import, so a
+  // preview never writes to a row the user hasn't committed to yet.
+  const [crossImportReversalMatches, setCrossImportReversalMatches] = useState<
+    Array<{ ri: number; storedId: string; storedTable: 'inflow_transactions' | 'outflow_transactions'; storedDate?: string }>
+  >([])
+  const [reversalNotes, setReversalNotes] = useState<string[]>([])
   const [rowOutflowTypes, setRowOutflowTypes] = useState<Record<number, string>>({})
   const [batchTxnType,    setBatchTxnType]    = useState('')
   const [batchOffsetRole, setBatchOffsetRole] = useState('')
@@ -453,6 +498,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // deterministic across repeated imports of the same file.
   const [precomputedInflowIds,  setPrecomputedInflowIds]  = useState<Record<number, string>>({})
   const [precomputedOutflowIds, setPrecomputedOutflowIds] = useState<Record<number, string>>({})
+  // Occurrence per row index, computed by markDuplicates against what the
+  // database already holds. Recomputing it in the insert loop would restart at
+  // 0 and collide with stored rows when a statement is imported in overlapping
+  // parts.
+  const [precomputedInflowOcc,  setPrecomputedInflowOcc]  = useState<Record<number, number>>({})
+  const [precomputedOutflowOcc, setPrecomputedOutflowOcc] = useState<Record<number, number>>({})
   // Row indices identified as DB duplicates — excluded from Step 4 configuration entirely.
   const [duplicateRis,    setDuplicateRis]    = useState<Set<number>>(new Set())
   const [dupCheckLoading, setDupCheckLoading] = useState(false)
@@ -666,6 +717,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     // Clear back-button sentinel ref so a fresh open can push a new one
     sentinelPushedRef.current = false
     pendingNavIsBackRef.current = false
+    setDateFormatDetection(null)
+    setDateFormatOverridden(false)
+    detectedForSheetRef.current = null
+    setAutoReversalRis(new Set())
+    setCrossImportReversalMatches([])
+    setReversalNotes([])
     // NOTE: intentionally do NOT reset internalBank — persists across "Import Another"
   }, [])
 
@@ -856,19 +913,44 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
       if (file.name.match(/\.pdf$/i)) {
         const { parsePDF } = await import('../../utils/pdfParser')
-        parsed = await parsePDF(file)
-        if (parsed.length === 0) throw new Error('No tabular data detected in this PDF. Ensure it contains a statement table.')
+        const pdfSheets = await parsePDF(file)
+        if (pdfSheets.length === 0) throw new Error('No tabular data detected in this PDF. Ensure it contains a statement table.')
+        // PDF cells are already text — nothing is hidden behind a serial number.
+        parsed = pdfSheets.map(s => ({ ...s, displayRows: s.rows }))
       } else if (file.name.match(/\.(xlsx|xls)$/i)) {
         const data = await file.arrayBuffer()
         const wb   = XLSX.read(data, { type: 'array', cellDates: false })
         parsed = wb.SheetNames.map(name => {
-          const ws        = wb.Sheets[name]
-          const rows      = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
-          const headerIdx = detectHeaderRow(rows)
-          const headers   = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
-          const dataRows  = rows.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c != null))
-          return { name, headers, rows: dataRows, rowCount: dataRows.length }
+          const ws = wb.Sheets[name]
+          // Two passes over the same sheet: `raw` (the actual values parsing
+          // uses) and `display` (raw: false — the text Excel renders, e.g. a
+          // date cell as "18/07/2025" rather than the serial 45856 underneath
+          // it). Both are sliced identically so row N lines up in each.
+          const rowsRaw     = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })  as unknown[][])
+          const rowsDisplay = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false }) as unknown[][])
+          const headerIdx = detectHeaderRow(rowsRaw)
+          const headers   = (rowsRaw[headerIdx] ?? []).map(h => String(h ?? '').trim())
+          const rawTail     = rowsRaw.slice(headerIdx + 1)
+          const displayTail = rowsDisplay.slice(headerIdx + 1)
+          const keepIdx   = []
+          for (let i = 0; i < rawTail.length; i++) {
+            if (rawTail[i].some(c => c !== '' && c != null)) keepIdx.push(i)
+          }
+          const dataRows    = keepIdx.map(i => rawTail[i])
+          const displayRows = keepIdx.map(i => displayTail[i] ?? [])
+          return { name, headers, rows: dataRows, rowCount: dataRows.length, displayRows }
         })
+      } else if (file.name.match(/\.csv$/i)) {
+        const text = await file.text()
+        const wb   = XLSX.read(text, { type: 'string' })
+        const name = wb.SheetNames[0]
+        const ws   = wb.Sheets[name]
+        // CSV cells are already plain text — raw and display are the same pass.
+        const rows      = (XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as unknown[][])
+        const headerIdx = detectHeaderRow(rows)
+        const headers   = (rows[headerIdx] ?? []).map(h => String(h ?? '').trim())
+        const dataRows  = rows.slice(headerIdx + 1).filter(r => r.some(c => c !== '' && c != null))
+        parsed = [{ name, headers, rows: dataRows, rowCount: dataRows.length, displayRows: dataRows }]
       } else {
         throw new Error('Only .xlsx, .xls, and .csv files are supported.')
       }
@@ -985,10 +1067,52 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   //   4. Query DB for ALL computed IDs (preset + fallback) to find duplicates
   //   5. Mark duplicate rows → excluded from Step 4 entirely
   //   6. Step 4 receives ONLY non-duplicate rows for configuration
+  // Date sanity, computed from the RAW cells before anything is written. The
+  // format selector is right beside the result, so a wrong choice shows up as
+  // findings the user can clear by picking the right one.
+  const dateAudit = useMemo(() => {
+    if (!sheet || !config) return null
+    // Both bank_statement and fx_transactions call the field 'date'.
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    if (dateIdx < 0) return null
+    return auditDateColumn((sheet.rows as unknown[][]).map(r => r[dateIdx]), dateFormat)
+  }, [sheet, config, mapping, dateFormat])
+
+  // Auto-detect the date arrangement from the DISPLAYED text (see
+  // ParsedSheet.displayRows) once the date column is known, and pre-select it.
+  // Runs once per sheet — detectedForSheetRef guards against re-detecting on
+  // every keystroke elsewhere and against clobbering a manual override the
+  // user has since made. Changing the mapping's date column deliberately DOES
+  // re-detect: pointing at a different column is a new question.
+  useEffect(() => {
+    if (!sheet || !config) return
+    const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
+    if (dateIdx < 0) return
+    // Keyed on the sheet OBJECT, not its name: two different uploads sharing
+    // the same default sheet name ("Sheet1") and the same date-column index
+    // otherwise looked identical to this guard, so the second file silently
+    // never got detected at all.
+    const prev = detectedForSheetRef.current
+    if (prev && prev.sheet === sheet && prev.dateIdx === dateIdx) return
+    detectedForSheetRef.current = { sheet, dateIdx }
+    setDateFormatOverridden(false)
+
+    const displaySource = sheet.displayRows.length > 0 ? sheet.displayRows : sheet.rows
+    const result = detectDateFormat((displaySource as unknown[][]).map(r => r[dateIdx]))
+    setDateFormatDetection(result)
+    if (result.kind === 'decided') setDateFormat(result.format)
+    // excel-serial / iso / ambiguous / no-evidence: leave the current
+    // selection as-is. Ambiguous in particular must not silently pick a side.
+  }, [sheet, config, mapping])
+
   const proceedToRowConfig = useCallback(async () => {
     if (!sheet || !config || targetTable !== 'bank_statement') return
     setDupCheckLoading(true)
     setDupCheckError(null)
+
+    const bankName = internalBank?.name ?? null
+    const dupOrgId = useOrgStore.getState().orgId
+    if (!dupOrgId) { setDupCheckError('No active organisation.'); setDupCheckLoading(false); return }
 
     try {
       // Column indices are derived ONCE here and carried on the row model.
@@ -1050,6 +1174,56 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
       }
 
+      // ── Reversal detection ──────────────────────────────────────────────
+      // A reversal carries the same bank reference as the transaction it
+      // undoes, and shows up one of two ways: the same column twice with
+      // opposite signs, or once in each column at the same amount. Caught
+      // here so "Reversal" is pre-selected before the user ever reaches the
+      // classification step — never hidden, always overridable per row there.
+      const { reversalRis, lonelyNegative, unpaired } = detectReversalsWithinFile(rows, merged, idx)
+      const detectedTxnTypes: Record<number, string> = {}
+      for (const ri of reversalRis) detectedTxnTypes[ri] = 'reversal'
+
+      // Rows this file can't explain alone: a lone negative-signed row (its
+      // original may be sitting in the database from an earlier import) or an
+      // unpaired positive row (its reversal, or the transaction it reverses,
+      // may already be stored under the opposite table). One batched,
+      // read-only lookup per direction — nothing is written here.
+      const crossMatches: typeof crossImportReversalMatches = []
+      {
+        const lonelyByKind = { inflow: lonelyNegative.filter(c => c.kind === 'inflow'), outflow: lonelyNegative.filter(c => c.kind === 'outflow') }
+        const unpairedByKind = { inflow: unpaired.filter(c => c.kind === 'inflow'), outflow: unpaired.filter(c => c.kind === 'outflow') }
+
+        const [sameInflow, sameOutflow, oppForInflow, oppForOutflow] = await Promise.all([
+          fetchRowsByRef('inflow_transactions',  'transaction_ref', 'amount',           lonelyByKind.inflow.map(c => c.ref),  bankName, dupOrgId),
+          fetchRowsByRef('outflow_transactions', 'transaction_id',  'amount_disbursed', lonelyByKind.outflow.map(c => c.ref), bankName, dupOrgId),
+          fetchRowsByRef('outflow_transactions', 'transaction_id',  'amount_disbursed', unpairedByKind.inflow.map(c => c.ref), bankName, dupOrgId),
+          fetchRowsByRef('inflow_transactions',  'transaction_ref', 'amount',           unpairedByKind.outflow.map(c => c.ref), bankName, dupOrgId),
+        ])
+        const findMatch = (rowsFound: ExistingRefRow[], ref: string, amount: number) =>
+          rowsFound.find(r => r.ref === ref && Math.abs(r.amount - amount) <= 0.005 && r.transaction_type !== 'reversal')
+
+        for (const c of lonelyByKind.inflow) {
+          const m = findMatch(sameInflow, c.ref, c.amount)
+          if (m) crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'inflow_transactions', storedDate: m.date })
+        }
+        for (const c of lonelyByKind.outflow) {
+          const m = findMatch(sameOutflow, c.ref, c.amount)
+          if (m) crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'outflow_transactions', storedDate: m.date })
+        }
+        for (const c of unpairedByKind.inflow) {
+          const m = findMatch(oppForInflow, c.ref, c.amount)
+          if (m) { detectedTxnTypes[c.ri] = 'reversal'; crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'outflow_transactions', storedDate: m.date }) }
+        }
+        for (const c of unpairedByKind.outflow) {
+          const m = findMatch(oppForOutflow, c.ref, c.amount)
+          if (m) { detectedTxnTypes[c.ri] = 'reversal'; crossMatches.push({ ri: c.ri, storedId: m.id, storedTable: 'inflow_transactions', storedDate: m.date }) }
+        }
+      }
+      setRowTxnTypes(prev => ({ ...detectedTxnTypes, ...prev }))
+      setAutoReversalRis(new Set(Object.keys(detectedTxnTypes).map(Number)))
+      setCrossImportReversalMatches(crossMatches)
+
       // Legacy per-row maps are derived from the model so the existing Step 4
       // and runImport code paths keep working while they are migrated over.
       const newInflowIds:  Record<number, string> = {}
@@ -1079,29 +1253,37 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // in a different bank is not treated as a duplicate.
       // Chunked queries + thrown errors — a large ID list (long fallback hashes)
       // must never overflow the URL or silently report every row as new.
-      const bankName = internalBank?.name ?? null
-      const dupOrgId = useOrgStore.getState().orgId
-      if (!dupOrgId) { setDupCheckError('No active organisation.'); return }
 
-      const [existingInflowRefs, existingOutflowIds] = await Promise.all([
-        fetchExistingTransactionIds('inflow_transactions', 'transaction_ref', inflowIdList, bankName, dupOrgId),
-        fetchExistingTransactionIds('outflow_transactions', 'transaction_id', outflowIdList, bankName, dupOrgId),
+      // Counts keyed on the WHOLE row, not the reference. A bank posts a
+      // transfer, its fee and the VAT on that fee under one Session ID, so
+      // matching on the reference marked the fee as a duplicate of the transfer
+      // and dropped a real transaction.
+      const [existingInflowCounts, existingOutflowCounts] = await Promise.all([
+        fetchExistingRowCounts('inflow_transactions',  'transaction_ref', 'amount',           'description', inflowIdList,  bankName, dupOrgId),
+        fetchExistingRowCounts('outflow_transactions', 'transaction_id',  'amount_disbursed', 'description', outflowIdList, bankName, dupOrgId),
       ])
 
-      // Merge in skipTxnIds from Import.tsx pre-stage (when user chose "Skip Duplicates").
-      // Only apply if the pre-stage was scoped to the same bank — prevents cross-bank
+      // skipTxnIds from Import.tsx pre-stage (when the user chose "Skip
+      // Duplicates") is an explicit per-reference choice, so it stays
+      // reference-keyed and is applied on top of the row-identity counts.
+      // Only when the pre-stage used the same bank — prevents cross-bank
       // contamination when "Import Another" is used with a different bank.
-      if (skipTxnIds && (!skipTxnBankName || skipTxnBankName === bankName)) {
-        for (const id of skipTxnIds) {
-          const normalized = normalizeId(id)
-          existingInflowRefs.add(normalized)
-          existingOutflowIds.add(normalized)
-        }
-      }
+      const forceSkipRefs = skipTxnIds && (!skipTxnBankName || skipTxnBankName === bankName)
+        ? new Set([...skipTxnIds].map(normalizeId))
+        : undefined
 
       // ── Stage 5: Mark duplicate rows + compute stats ──────────────────────
-      const stats = markDuplicates(rows, existingInflowRefs, existingOutflowIds)
+      const stats = markDuplicates(rows, existingInflowCounts, existingOutflowCounts, forceSkipRefs)
       const newDuplicateRis = new Set<number>(rows.filter(r => r.isDuplicate).map(r => r.ri))
+      const inflowOcc:  Record<number, number> = {}
+      const outflowOcc: Record<number, number> = {}
+      for (const row of rows) {
+        if (row.isDuplicate) continue
+        if (row.kind === 'inflow') inflowOcc[row.ri] = row.refOccurrence
+        else                       outflowOcc[row.ri] = row.refOccurrence
+      }
+      setPrecomputedInflowOcc(inflowOcc)
+      setPrecomputedOutflowOcc(outflowOcc)
 
       setImportRows(rows)
       setDuplicateRis(newDuplicateRis)
@@ -1245,6 +1427,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     setRetrying(true)
     const errors: string[] = []
     let imported = 0
+    let duplicates = 0
     const stillInflows:  Record<string, unknown>[] = []
     const stillOutflows: Record<string, unknown>[] = []
     const BATCH = 250
@@ -1259,7 +1442,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (error) {
             // Isolate the actually-bad row(s) instead of failing the whole batch again.
             const split = await insertBatchResilient(async r => supabase.from(table).insert(r), batch)
-            imported += split.imported
+            imported   += split.imported
+            // A retried row the database already holds is resolved, not still
+            // failing — drop it from the failed bucket so Retry can reach zero.
+            duplicates += split.duplicates.length
             bucket.push(...split.failed)
             for (const m of new Set(split.errors)) {
               const info = describeImportError({ message: m })
@@ -1276,6 +1462,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         ...prev,
         imported: prev.imported + imported,
         skipped:  Math.max(0, prev.skipped - imported),
+        raceDuplicates: (prev.raceDuplicates ?? 0) + duplicates,
         errors:   errors.length > 0 ? [...prev.errors, ...errors] : prev.errors,
         failedRows: (stillInflows.length || stillOutflows.length)
           ? { inflows: stillInflows, outflows: stillOutflows }
@@ -1376,6 +1563,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     // Dup skip set — built from pre-import stage only (skipTxnIds passed from Import.tsx)
     const allSkipIds = new Set(skipTxnIds ? [...skipTxnIds].map(normalizeId) : [])
     let fallbackIdCount = 0
+    let raceDuplicates  = 0
     const collisions: string[] = []
 
     // ── Bank statement split mode ─────────────────────────────────────────────
@@ -1403,7 +1591,14 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         if (recordedMode === 'txn_date'  && txnDate)     return `${txnDate}T00:00:00.000Z`
         return importTimestamp
       }
-      // Collision trackers for fallback IDs: hash → count of times seen this batch
+      // Collision trackers: reference → count of times seen this batch.
+      //
+      // Applied to bank-provided references as well as generated fallback IDs.
+      // Statements do occasionally repeat a reference across two genuine rows
+      // (a split settlement, a charge posted against its parent's ref), and the
+      // transaction-ref unique index would reject the second one — losing a real
+      // transaction. Suffixing keeps both rows and flags them for review, which
+      // is the same treatment fallback-ID collisions already get.
       const inflowIdCounts  = new Map<string, number>()
       const outflowIdCounts = new Map<string, number>()
 
@@ -1419,7 +1614,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         // Rows already in the database were excluded from Step 4 configuration.
         if (duplicateRis.has(ri)) { skipped++; continue }
 
-        const credit = creditIdx >= 0 ? parseNumber(raw[creditIdx])      : 0
+        // A negative credit must not be silently dropped — see buildImportRows.ts's
+        // matching comment. Kept as `creditSigned` for the reversal precheck at
+        // Step 3→4 (which reads the raw sign itself), everything downstream here
+        // uses the normalised positive `credit`.
+        const creditSigned = creditIdx >= 0 ? parseNumber(raw[creditIdx]) : 0
+        const credit = Math.abs(creditSigned)
         const debit  = debitIdx  >= 0 ? parseDebitAmount(raw[debitIdx]) : 0
         const desc   = descIdx >= 0 && raw[descIdx] != null && raw[descIdx] !== ''
                          ? String(raw[descIdx]).trim() : null
@@ -1429,7 +1629,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         const rowTxnType = rowTxnTypes[ri] ?? ''
         const origId  = rowOrigTxnIds[ri] ?? ''
 
-        if (credit > 0) {
+        if (creditSigned !== 0) {
           const txnType = rowTxnType
           const row: Record<string, unknown> = { date, amount: credit, description: desc, transaction_ref: ref }
           if (userId) row.created_by = userId
@@ -1456,16 +1656,22 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (!row.transaction_ref) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
             // Falls back to on-the-fly generation as a safety net.
-            const baseId = precomputedInflowIds[ri]
+            row.transaction_ref = precomputedInflowIds[ri]
               ?? await generateFallbackTransactionId(
                 String(date), String(credit), desc ?? '', internalBank?.name ?? ''
               )
-            const count = inflowIdCounts.get(baseId) ?? 0
-            inflowIdCounts.set(baseId, count + 1)
-            row.transaction_ref = count === 0 ? baseId : `${baseId}-${count}`
             fallbackIdCount++
-            if (count > 0) collisions.push(
-              `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+          }
+          {
+            // The reference is stored exactly as the bank gave it. Rows that are
+            // otherwise identical are separated by ref_occurrence instead — see
+            // src/utils/refOccurrence.ts. The value comes from the duplicate
+            // check, which counted what the database already holds.
+            const occ = precomputedInflowOcc[ri]
+              ?? nextOccurrence(inflowIdCounts, rowFingerprint(String(row.transaction_ref), String(date), credit, desc))
+            row.ref_occurrence = occ
+            if (occ > 0) collisions.push(
+              `Inflow   ${date}  ${credit}  "${(desc ?? '').slice(0, 35)}"  → occurrence ${occ}`
             )
           }
           if (txnType) row.transaction_type = txnType
@@ -1483,35 +1689,43 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           if (internalBank) { row.bank_name = internalBank.name; row.bank_id = internalBank.id }
           if (!row.transaction_id) {
             // Use ID pre-computed at Step 3→4 transition (after normalization, stable).
-            const baseId = precomputedOutflowIds[ri]
+            row.transaction_id = precomputedOutflowIds[ri]
               ?? await generateFallbackTransactionId(
                 String(date), String(debit), desc ?? '', internalBank?.name ?? ''
               )
-            const count = outflowIdCounts.get(baseId) ?? 0
-            outflowIdCounts.set(baseId, count + 1)
-            row.transaction_id = count === 0 ? baseId : `${baseId}-${count}`
             fallbackIdCount++
-            if (count > 0) collisions.push(
-              `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → …${(row.transaction_id as string).slice(-10)}`
+          }
+          {
+            const occ = precomputedOutflowOcc[ri]
+              ?? nextOccurrence(outflowIdCounts, rowFingerprint(String(row.transaction_id), String(date), debit, desc))
+            row.ref_occurrence = occ
+            if (occ > 0) collisions.push(
+              `Outflow  ${date}  ${debit}  "${(desc ?? '').slice(0, 35)}"  → occurrence ${occ}`
             )
           }
-          const sc = rowStageCodes[ri]
-          if (sc) {
-            if (sc.s1) row.stage_code_1 = sc.s1
-            if (sc.s2) row.stage_code_2 = sc.s2
-          }
-          const otId = rowOutflowTypes[ri]
-          if (otId) {
-            row.outflow_type_id = otId
-          } else if (sc?.s1 && outflowTypeOptions.length > 0) {
-            // Fallback auto-mapping for rows not explicitly configured in UI
-            const cat = categories.find((c: { name: string }) => c.name === sc.s1)
-            if (cat) {
-              const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
-              if (suggested) row.outflow_type_id = suggested.id
-            } else {
-              const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
-              if (match) row.outflow_type_id = match.id
+          // Non-Normal transactions skip distribution/category rules entirely —
+          // same enforcement as the inflow side above. Applies equally to a type
+          // the user picked and one auto-detected (reversal detection seeds
+          // rowTxnTypes the same way a manual selection would).
+          if (!txnType) {
+            const sc = rowStageCodes[ri]
+            if (sc) {
+              if (sc.s1) row.stage_code_1 = sc.s1
+              if (sc.s2) row.stage_code_2 = sc.s2
+            }
+            const otId = rowOutflowTypes[ri]
+            if (otId) {
+              row.outflow_type_id = otId
+            } else if (sc?.s1 && outflowTypeOptions.length > 0) {
+              // Fallback auto-mapping for rows not explicitly configured in UI
+              const cat = categories.find((c: { name: string }) => c.name === sc.s1)
+              if (cat) {
+                const suggested = getDefaultOutflowTypeForCategory(cat.id, categoryOutflowMaps, outflowTypeOptions)
+                if (suggested) row.outflow_type_id = suggested.id
+              } else {
+                const match = outflowTypeOptions.find(t => t.name.toLowerCase() === sc.s1.toLowerCase())
+                if (match) row.outflow_type_id = match.id
+              }
             }
           }
           row.is_pending_deduction = rowPendingDeductions.has(ri)
@@ -1618,8 +1832,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const split = await insertBatchResilient(
             async rows => supabase.from('inflow_transactions').insert(rows), batch,
           )
-          imported += split.imported
-          skipped  += split.failed.length
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
           failedInflows.push(...split.failed)
           for (const m of new Set(split.errors)) pushImportError({ message: m })
         } else imported += batch.length
@@ -1638,8 +1853,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           const split = await insertBatchResilient(
             async rows => supabase.from('outflow_transactions').insert(rows), batch,
           )
-          imported += split.imported
-          skipped  += split.failed.length
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
           failedOutflows.push(...split.failed)
           for (const m of new Set(split.errors)) pushImportError({ message: m })
         } else imported += batch.length
@@ -1669,6 +1885,35 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
       }
 
+      // Reversal retag — the read-only half ran at Step 3→4; this is the only
+      // part of reversal detection allowed to write, and only now that the
+      // paired new row has actually been committed. A row skipped as a
+      // pre-insert duplicate never became a stored reversal, so its match is
+      // dropped rather than tagging an original for a row that didn't land.
+      if (crossImportReversalMatches.length > 0) {
+        const notes: string[] = []
+        for (const m of crossImportReversalMatches) {
+          if (duplicateRis.has(m.ri)) continue
+          // No .neq('transaction_type', 'reversal') filter here: in Postgres a
+          // NULL column fails <> comparisons too, and most stored rows have no
+          // transaction_type set at all — that filter would have silently
+          // excluded exactly the common case. findMatch already only selected
+          // rows that were not already 'reversal', so this is safe to run
+          // unconditionally on the ids it returned.
+          const { error: retagErr, count } = await supabase
+            .from(m.storedTable)
+            .update({ transaction_type: 'reversal' }, { count: 'exact' })
+            .eq('id', m.storedId).eq('org_id', orgId)
+          if (!retagErr && count) {
+            notes.push(
+              `Original transaction${m.storedDate ? ` from ${m.storedDate}` : ''} (already in your records) was ` +
+              `tagged Reversal to match the reversal found in this statement.`
+            )
+          }
+        }
+        if (notes.length > 0) setReversalNotes(notes)
+      }
+
       // Record the run so "Undo this import" can target exactly these rows.
       if (imported > 0) {
         const { error: batchErr } = await supabase.from('import_batches').insert({
@@ -1685,7 +1930,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
 
       importCompletedRef.current = true
       setResult({
-        imported, skipped, errors, fallbackIdCount, collisions,
+        imported, skipped, errors, fallbackIdCount, collisions, raceDuplicates,
         failedRows: (failedInflows.length || failedOutflows.length)
           ? { inflows: failedInflows, outflows: failedOutflows }
           : undefined,
@@ -1818,15 +2063,21 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
           row.transaction_ref = rawRef
         } else {
           // Generate deterministic fallback ref from date + amount + narration + bank
-          const baseRef = await generateFallbackTransactionId(
+          row.transaction_ref = await generateFallbackTransactionId(
             String(date), String(dep || wd), narr, internalBank?.name ?? ''
           )
-          const count = fxIdCounts.get(baseRef) ?? 0
-          fxIdCounts.set(baseRef, count + 1)
-          row.transaction_ref = count === 0 ? baseRef : `${baseRef}-${count}`
           fallbackIdCount++
-          if (count > 0) collisions.push(
-            `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → …${(row.transaction_ref as string).slice(-10)}`
+        }
+        {
+          // Same treatment as the bank-statement path: the reference is stored
+          // as the bank gave it, and identical rows are separated by occurrence.
+          const occ = nextOccurrence(
+            fxIdCounts,
+            rowFingerprint(String(row.transaction_ref), String(date), dep || wd, narr),
+          )
+          row.ref_occurrence = occ
+          if (occ > 0) collisions.push(
+            `FX  ${date}  ${dep || wd}  "${narr.slice(0, 35)}"  → occurrence ${occ}`
           )
         }
         if (userId) row.created_by = userId
@@ -1883,7 +2134,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         const batch = newFxRows.slice(i, i + BATCH)
         const { error: err } = await supabase.from('fx_transactions').insert(batch)
         if (err) {
-          errors.push(`FX batch: ${friendlyError(err, 'process FX')}`); skipped += batch.length
+          // Split the batch so one duplicate (or one bad row) doesn't cost the
+          // other 99 — the fx_transactions ref index rejects the whole INSERT.
+          const split = await insertBatchResilient(
+            async rows => supabase.from('fx_transactions').insert(rows), batch,
+          )
+          imported       += split.imported
+          skipped        += split.failed.length + split.duplicates.length
+          raceDuplicates += split.duplicates.length
+          for (const m of new Set(split.errors)) errors.push(`FX row: ${m}`)
         } else {
           imported += batch.length
         }
@@ -1891,7 +2150,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       }
 
       importCompletedRef.current = true
-      setResult({ imported, skipped, errors, fallbackIdCount, collisions })
+      setResult({ imported, skipped, errors, fallbackIdCount, collisions, raceDuplicates })
     }
     } catch (e: unknown) {
       errors.push(friendlyError(e, 'import'))
@@ -1905,7 +2164,8 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       internalBank,
       rowIncomeTypes, incomeTypes,
       allocConfigs, allocGroups,
-      duplicateRis, precomputedInflowIds, precomputedOutflowIds])
+      duplicateRis, precomputedInflowIds, precomputedOutflowIds,
+      precomputedInflowOcc, precomputedOutflowOcc, crossImportReversalMatches])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -2080,7 +2340,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               </select>
             </div>
 
-            {/* Date format selector */}
+            {/* Date format selector. Auto-detected where the file itself proves it
+                (a component over 12 can only be a day); the radios are always live
+                so a wrong guess — or a case the file can't prove either way — is
+                one click to correct. */}
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-gray-600">Date format in this file</label>
               <div className="flex gap-4">
@@ -2091,13 +2354,70 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                       name="dateFormat"
                       value={fmt}
                       checked={dateFormat === fmt}
-                      onChange={() => setDateFormat(fmt)}
+                      onChange={() => { setDateFormat(fmt); setDateFormatOverridden(true) }}
                       className="text-primary focus:ring-primary/30"
                     />
                     {fmt}
                   </label>
                 ))}
               </div>
+              {dateFormatDetection && !dateFormatOverridden && (() => {
+                const d = dateFormatDetection
+                if (d.kind === 'decided') {
+                  const dayFirst  = d.format === 'DD/MM/YYYY'
+                  const dayValue  = dayFirst ? d.a : d.b
+                  return (
+                    <p className="text-[11px] text-success flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        Detected from row {d.row}: <span className="font-mono">{d.a}/{d.b}/…</span> — {dayValue} can't
+                        be a month, so it must be the day, which comes {dayFirst ? 'first' : 'second'} here.
+                        Change the selection above if this is wrong.
+                      </span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'excel-serial') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates are stored as Excel date values — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'iso') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates are already YYYY-MM-DD — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'month-name') {
+                  return (
+                    <p className="text-[11px] text-gray-500 flex items-start gap-1">
+                      <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>These dates spell out the month (e.g. 18-Jul-2025) — the selection above doesn't affect them.</span>
+                    </p>
+                  )
+                }
+                if (d.kind === 'ambiguous') {
+                  return (
+                    <p className="text-[11px] text-amber-600 flex items-start gap-1">
+                      <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>
+                        Every date in this column could be read either way (day and month are both ≤ 12
+                        in all {d.sampleCount} checked) — the file can't prove which arrangement is right.
+                        Check the file and choose above.
+                      </span>
+                    </p>
+                  )
+                }
+                return null
+              })()}
+              {dateFormatOverridden && (
+                <p className="text-[11px] text-gray-500">Using your selection above.</p>
+              )}
             </div>
 
             {/* FX Currency — only for fx_transactions */}
@@ -2299,6 +2619,49 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
               ) : null
             })()}
 
+            {dateAudit && dateAudit.findings.length > 0 && (
+              <div className={`rounded-lg border px-4 py-3 space-y-3 ${
+                dateAudit.blocking
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-300'
+                  : 'bg-amber-50 dark:bg-amber-900/20 border-amber-300'
+              }`}>
+                <div className={`flex items-start gap-2 text-sm font-medium ${
+                  dateAudit.blocking ? 'text-red-800 dark:text-red-200' : 'text-amber-800 dark:text-amber-200'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    {dateAudit.blocking
+                      ? 'These dates cannot be imported as they are'
+                      : 'Check these dates before continuing'}
+                  </span>
+                </div>
+                {dateAudit.findings.map(f => (
+                  <div key={f.symptom} className="text-xs space-y-1 pl-6">
+                    <div className={f.blocking ? 'text-red-700 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'}>
+                      <strong>{f.count.toLocaleString()} of {dateAudit.total.toLocaleString()} rows</strong>{' '}
+                      {DATE_SYMPTOM_TEXT[f.symptom].title}. {DATE_SYMPTOM_TEXT[f.symptom].detail}
+                    </div>
+                    <div className="font-mono text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+                      {f.samples.map(sm => (
+                        <div key={sm.row}>
+                          row {sm.row}: {JSON.stringify(sm.raw)} →{' '}
+                          {sm.parsed ?? 'not a date — this row would be dropped'}
+                        </div>
+                      ))}
+                      {f.count > f.samples.length && (
+                        <div className="italic">…and {(f.count - f.samples.length).toLocaleString()} more</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {dateAudit.blocking && (
+                  <p className="text-xs text-red-700 dark:text-red-300 pl-6">
+                    Correct the date format above, or fix the dates in the file and upload it again.
+                  </p>
+                )}
+              </div>
+            )}
+
             {dupCheckError && (
               <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -2316,7 +2679,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                   if (!f.required) return false
                   if (f.key === 'currency' && fxCurrency) return false
                   return !mappedFields.has(f.key)
-                }) || dupCheckLoading
+                }) || dupCheckLoading || !!dateAudit?.blocking
               })()}
               nextLoading={dupCheckLoading}
               nextLabel={targetTable === 'bank_statement'
@@ -2890,6 +3253,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                       {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                   </div>
+                                  {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                    <p className="text-[10px] text-primary px-3 -mt-1 pb-1.5">Auto-detected from statement — change above if wrong.</p>
+                                  )}
                                   {(txnType === 'refund' || txnType === 'reversal') && (
                                     <div className="px-3 pb-2 flex items-center gap-2">
                                       <span className="text-xs text-gray-500 w-28 shrink-0">Original Txn ID:</span>
@@ -3070,6 +3436,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                           className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                           {availableInflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
+                                        {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                          <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                        )}
                                       </div>
                                       {/* Original Txn ID */}
                                       {(txnType === 'refund' || txnType === 'reversal') && (
@@ -3509,6 +3878,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                     {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                   </select>
                                 </div>
+                                {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                  <p className="text-[10px] text-primary px-3 -mt-1 pb-1.5">Auto-detected from statement — change above if wrong.</p>
+                                )}
                                 {outflowTypeOptions.length > 0 && (
                                   <div className="px-3 pb-2 flex items-center gap-2">
                                     <span className="text-xs text-gray-500 w-28 shrink-0">Outflow Type:</span>
@@ -3706,6 +4078,9 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                                         className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/30 bg-white">
                                         {availableOutflowTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                       </select>
+                                      {autoReversalRis.has(ri) && txnType === 'reversal' && (
+                                          <p className="text-[10px] text-primary mt-0.5">Auto-detected from statement — change above if wrong.</p>
+                                        )}
                                     </div>
                                     {/* Original Txn ID */}
                                     {(txnType === 'refund' || txnType === 'reversal') && (
@@ -3860,7 +4235,15 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                             .map(f => {
                               const colIdx = sheet.headers.findIndex(h => mapping[h] === f.key)
                               const val = colIdx >= 0 ? row[colIdx] : ''
-                              const display = f.key === 'date' ? (parseDate(val) ?? String(val)) : String(val ?? '')
+                              // Date parsing needs the RAW value (a serial number parses;
+                              // its display text does not) and dateFormat passed explicitly —
+                              // parseDate defaults to DD/MM/YYYY, so without it this preview
+                              // ignored the user's choice. Every other field shows the
+                              // DISPLAYED text, same reasoning as the Step 3 preview above.
+                              const displayVal = sheet.displayRows[ri]?.[colIdx] ?? val
+                              const display = f.key === 'date'
+                                ? (parseDate(val, dateFormat) ?? String(displayVal))
+                                : String(displayVal ?? '')
                               return (
                                 <td key={f.key} className="px-3 py-1.5 text-gray-600 whitespace-nowrap border-r border-gray-50 last:border-0 max-w-[120px] truncate">
                                   {display}
@@ -3910,6 +4293,16 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                   {result.fallbackIdCount > 0 && (
                     <div className="text-blue-600 dark:text-blue-400">ℹ {result.fallbackIdCount} fallback ID(s) auto-generated</div>
                   )}
+                  {(result.raceDuplicates ?? 0) > 0 && (
+                    <div className="text-blue-600 dark:text-blue-400">
+                      ℹ {result.raceDuplicates} row(s) were already in the database and were not
+                      added again — they landed between the duplicate check and the import, or
+                      this run repeated an earlier one. Nothing was duplicated.
+                    </div>
+                  )}
+                  {reversalNotes.map((note, i) => (
+                    <div key={i} className="text-blue-600 dark:text-blue-400">↻ {note}</div>
+                  ))}
                 </div>
                 {(() => {
                   const failedCount = (result.failedRows?.inflows.length ?? 0) + (result.failedRows?.outflows.length ?? 0)

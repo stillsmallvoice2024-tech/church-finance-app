@@ -10,7 +10,7 @@ import type { FXTransaction } from '../../hooks/useFX'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
 import { useOrgStore } from '../../store/orgStore'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
-import { supabase } from '../../lib/supabase'
+import { countIdenticalManualEntries } from '../../utils/manualEntryDuplicate'
 
 const schema = z.object({
   date:            z.string().min(1, 'Date is required'),
@@ -43,6 +43,9 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
   const { foreignCurrencies, getCurrencySymbol } = useOrgCurrency()
   const orgId = useOrgStore(s => s.orgId)
   const [dupError, setDupError] = useState<string | null>(null)
+  // Held save while the user confirms an identical entry is genuinely separate.
+  const [pendingDup, setPendingDup] = useState<{ count: number } | null>(null)
+  const confirmedDupRef = useRef(false)
 
   const defaultFxCurrency = foreignCurrencies[0]?.code ?? 'USD'
 
@@ -95,6 +98,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
     const deposit    = values.type === 'deposit'    ? values.amount : 0
     const withdrawal = values.type === 'withdrawal' ? values.amount : 0
     setDupError(null)
+    setPendingDup(null)
     try {
       if (isEdit && editRecord) {
         const input: UpdateFXTransactionInput = {
@@ -112,13 +116,28 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
       } else {
         const txnRef = values.transaction_ref?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount), values.narration ?? '', values.bank_name ?? '')
-        let dupQ = supabase.from('fx_transactions').select('id').eq('org_id', orgId).eq('transaction_ref', txnRef)
-        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
-        const { data: dup } = await dupQ.limit(1)
-        if (dup && dup.length > 0) {
-          setDupError('Duplicate: an FX transaction with this ref already exists for the selected bank.')
+
+        if (!orgId) {
+          setDupError('No active organisation — please reload and try again.')
           return
         }
+        // Identical FX entries — same ref, date, amount, narration and bank.
+        // Leaving the ref blank hashes those into it, so two separate exchanges
+        // of the same amount on one day collide. Ask rather than reject.
+        const identical = await countIdenticalManualEntries({
+          table: 'fx_transactions', refColumn: 'transaction_ref',
+          amountColumn: 'deposit', amountColumn2: 'withdrawal',
+          descColumn: 'narration',
+          orgId, bankName: values.bank_name || null,
+          ref: txnRef, date: values.date, amount: values.amount,
+          description: values.narration ?? null,
+        })
+        if (identical > 0 && !confirmedDupRef.current) {
+          setPendingDup({ count: identical })
+          return
+        }
+        const refOccurrence = confirmedDupRef.current ? identical : 0
+        confirmedDupRef.current = false
         const input: AddFXTransactionInput = {
           date:            values.date,
           currency:        values.currency,
@@ -126,6 +145,7 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
           withdrawal,
           narration:       values.narration       || undefined,
           transaction_ref: txnRef,
+          ref_occurrence:  refOccurrence,
           bank_name:       values.bank_name       || undefined,
           bank_id:         watchedBankId || undefined,
         }
@@ -143,6 +163,38 @@ export function AddFXModal({ open, onClose, onSuccess, currentBalances, editReco
       <form onSubmit={handleSubmit(onSubmit, focusFirstInvalid)} noValidate className="space-y-4">
         {error    && <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
         {dupError && <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">{dupError}</div>}
+
+        {pendingDup && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 px-4 py-3 space-y-2">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              You already have {pendingDup.count === 1 ? 'an FX entry' : `${pendingDup.count} FX entries`} recorded
+              with this same date, amount and narration
+              {watch('bank_name') ? ` for ${watch('bank_name')}` : ''}. Is this a genuinely
+              separate transaction, or did the first save already go through?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  confirmedDupRef.current = true
+                  setPendingDup(null)
+                  void handleSubmit(onSubmit)()
+                }}
+                className="px-3 min-h-[36px] text-xs text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60"
+              >
+                Yes, record it as a separate entry
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDup(null)}
+                className="px-3 min-h-[36px] text-xs text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Date *" error={errors.date?.message}>

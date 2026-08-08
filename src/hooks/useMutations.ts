@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore'
 import { useOrgStore } from '../store/orgStore'
 import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
+import { normalizeId } from '../utils/normalizeId'
 import type { StartingBalanceRow } from './useBanks'
 import {
   cascadeCategoryRename,
@@ -14,6 +15,28 @@ import {
 import { invalidateFundBuckets } from '../utils/fundBuckets'
 
 const BULK_CHUNK_SIZE = 500
+
+// Transaction references are unique per (org, bank) in the database, and the
+// index compares them normalised (public.normalize_txn_ref mirrors normalizeId).
+// The import already normalises before writing; manual entry did not, so a ref
+// pasted with a trailing space or a soft hyphen stored a variant that the
+// import's dedup pre-check — which compares against the raw stored text —
+// would never match. Normalise on the way in so stored text, pre-check and
+// index all agree. An all-whitespace ref becomes null rather than '', so it is
+// treated as "no reference" and exempted instead of colliding with every other
+// blank one.
+const REF_COLUMNS = ['transaction_ref', 'transaction_id'] as const
+
+function normalizeRefFields<T extends object>(input: T): T {
+  const out = { ...input } as Record<string, unknown>
+  for (const col of REF_COLUMNS) {
+    if (!(col in out)) continue
+    const raw = out[col]
+    if (typeof raw !== 'string') continue
+    out[col] = normalizeId(raw) || null
+  }
+  return out as T
+}
 
 function chunkArray<T>(arr: T[], size: number): T[][] {
   const chunks: T[][] = []
@@ -120,6 +143,13 @@ async function withCategoryId<T extends { stage_code_1?: string; category_id?: s
 export interface AddInflowInput {
   date: string
   amount: number
+  /**
+   * Position among otherwise-identical rows (0 = first). Manual entry derives
+   * the reference by hashing date + amount + description + bank when the field
+   * is left blank, so two genuinely separate gifts of the same amount on the
+   * same day hash alike; this is what lets the second one be recorded.
+   */
+  ref_occurrence?: number
   description?: string
   allocation_config_id?: string
   stage_code_1?: string
@@ -147,6 +177,8 @@ export interface AddInflowInput {
 export interface AddOutflowInput {
   date: string
   amount_disbursed: number
+  /** See AddInflowInput.ref_occurrence. */
+  ref_occurrence?: number
   is_pending_deduction?: boolean
   description?: string
   allocation_config_id?: string
@@ -226,7 +258,7 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
       const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('inflow_transactions')
-        .insert({ ...payload, created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(payload), created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -275,7 +307,7 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
       const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...payload, is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(payload), is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -487,8 +519,12 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
       // A stage_code_1 edit repoints the row at a different fund — re-resolve
       // category_id so the authoritative link follows the displayed name.
       const resolved = await syncCategoryIdOnUpdate(table, safeUpdates)
+      const normalized = normalizeRefFields(resolved)
 
-      const withTimestamp = { ...resolved, updated_at: new Date().toISOString() }
+      // Only inflow_transactions and outflow_transactions have updated_at
+      const withTimestamp = table !== 'intra_flows'
+        ? { ...normalized, updated_at: new Date().toISOString() }
+        : normalized
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
@@ -922,6 +958,8 @@ export function useUpdateCategoryGroup(): MutationHook<{ id: string; name: strin
 export interface AddFXTransactionInput {
   date: string
   currency: string
+  /** See AddInflowInput.ref_occurrence. */
+  ref_occurrence?: number
   deposit?: number
   withdrawal?: number
   narration?: string
@@ -948,9 +986,10 @@ export function useAddFXTransaction(): MutationHook<AddFXTransactionInput, strin
         p_deposit:         input.deposit    ?? 0,
         p_withdrawal:      input.withdrawal ?? 0,
         p_narration:       input.narration       ?? null,
-        p_transaction_ref: input.transaction_ref ?? null,
+        p_transaction_ref: normalizeId(input.transaction_ref ?? '') || null,
         p_bank_name:       input.bank_name       ?? null,
         p_bank_id:         input.bank_id         ?? null,
+        p_ref_occurrence:  input.ref_occurrence   ?? 0,
       })
       if (err) throw err
       if (!data) throw new Error('No ID returned.')
@@ -998,7 +1037,7 @@ export function useUpdateFXTransaction(): MutationHook<UpdateFXTransactionInput>
         p_deposit:         input.deposit    ?? 0,
         p_withdrawal:      input.withdrawal ?? 0,
         p_narration:       input.narration       ?? null,
-        p_transaction_ref: input.transaction_ref ?? null,
+        p_transaction_ref: normalizeId(input.transaction_ref ?? '') || null,
         p_bank_name:       input.bank_name       ?? null,
         p_bank_id:         input.bank_id         ?? null,
       })

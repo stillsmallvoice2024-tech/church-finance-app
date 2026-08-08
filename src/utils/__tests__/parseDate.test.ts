@@ -159,3 +159,87 @@ describe('parseDate — regression: no off-by-one day across UTC offsets', () =>
     })
   }
 })
+
+// ---------------------------------------------------------------------------
+// 8. The chosen format is now honoured everywhere — no silent fallback
+//
+// Previously, anything the strict `d/m/yyyy`-with-slashes regex missed fell
+// through to `new Date(s)`, which applied its own rules regardless of what the
+// user selected: "5-Jan" became 2001-01-05, a bare "2026" became 2026-01-01,
+// and the numeric serial path let a bare year (2026) parse as 1905-07-18.
+// None of those are dates the cell actually contained, and none of them are
+// possible any more — this section is the regression net for that rewrite.
+// ---------------------------------------------------------------------------
+
+describe('parseDate — dash and dot separators (previously silently dropped)', () => {
+  it('18-07-2025 → 2025-07-18', () => {
+    expect(parseDate('18-07-2025')).toBe('2025-07-18')
+  })
+
+  it('18.07.2025 → 2025-07-18', () => {
+    expect(parseDate('18.07.2025')).toBe('2025-07-18')
+  })
+
+  it('18-07-25 (2-digit year) → 2025-07-18', () => {
+    expect(parseDate('18-07-25')).toBe('2025-07-18')
+  })
+
+  it('honours MM/DD/YYYY with dash separators too', () => {
+    expect(parseDate('07-18-2025', 'MM/DD/YYYY')).toBe('2025-07-18')
+  })
+})
+
+describe('parseDate — a leading 4-digit year is always a year', () => {
+  it('2025-07-18 stays 2025-07-18 regardless of the chosen format', () => {
+    expect(parseDate('2025-07-18', 'MM/DD/YYYY')).toBe('2025-07-18')
+    expect(parseDate('2025-07-18', 'DD/MM/YYYY')).toBe('2025-07-18')
+  })
+
+  it('2025/07/18 with slashes behaves the same way', () => {
+    expect(parseDate('2025/07/18', 'MM/DD/YYYY')).toBe('2025-07-18')
+  })
+})
+
+describe('parseDate — no longer guesses when the year is genuinely absent', () => {
+  it('a bare year number is not treated as an Excel serial', () => {
+    // Previously: parse_date_code(2026) -> 1905-07-18.
+    expect(parseDate(2026)).toBeNull()
+  })
+
+  it('a bare year string invents nothing', () => {
+    // Previously: new Date("2026") -> 2026-01-01.
+    expect(parseDate('2026')).toBeNull()
+  })
+
+  it('a day-month with no year invents nothing', () => {
+    // Previously: new Date("5-Jan") -> 2001-01-05 (V8's arbitrary default year).
+    expect(parseDate('5-Jan')).toBeNull()
+    expect(parseDate('Jan-5')).toBeNull()
+  })
+})
+
+describe('parseDate — rejects calendar-invalid dates instead of silently correcting them', () => {
+  it('31 does not roll over into the next month', () => {
+    expect(parseDate('31/04/2025')).toBeNull() // April has 30 days
+  })
+
+  it('29 February is rejected outside a leap year', () => {
+    expect(parseDate('29/02/2025')).toBeNull()
+    expect(parseDate('29/02/2024')).toBe('2024-02-29')
+  })
+
+  it('a month above 12 is rejected', () => {
+    expect(parseDate('13/05/2025', 'MM/DD/YYYY')).toBeNull()
+  })
+})
+
+describe('parseDate — Excel serials below the plausible floor are rejected, not misread', () => {
+  it('a small number is not silently treated as an 1900s date', () => {
+    expect(parseDate(1990)).toBeNull()
+    expect(parseDate(100)).toBeNull()
+  })
+
+  it('a genuine modern serial still resolves', () => {
+    expect(parseDate(45808)).toBe('2025-05-31')
+  })
+})

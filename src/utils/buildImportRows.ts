@@ -13,6 +13,7 @@ import { normalizeId } from './normalizeId'
 import { parseDate, type DateFormat } from './parseDate'
 import { generateFallbackTransactionId } from './generateTransactionId'
 import type { ImportRow, ColumnIndices } from '../types/importRow'
+import { rowFingerprint, nextOccurrence } from './refOccurrence'
 import { emptyRowConfig } from '../types/importRow'
 
 // ── Cell parsing ─────────────────────────────────────────────────────────────
@@ -158,10 +159,6 @@ export async function buildImportRows(
   const { onProgress, yieldEvery = 500 } = opts
   const rows: ImportRow[] = []
 
-  // Separate counters per kind, mirroring the original inflow/outflow ID maps.
-  const inflowIdCounts  = new Map<string, number>()
-  const outflowIdCounts = new Map<string, number>()
-
   for (let ri = 0; ri < merged.length; ri++) {
     if (yieldEvery > 0 && ri > 0 && ri % yieldEvery === 0) {
       onProgress?.(ri, merged.length)
@@ -179,19 +176,25 @@ export async function buildImportRows(
     const ref    = idx.ref >= 0 && raw[idx.ref] != null && raw[idx.ref] !== ''
                      ? normalizeId(String(raw[idx.ref])) || null : null
 
-    if (credit > 0) {
+    // A negative credit silently vanished here — the row was never built, so
+    // it never reached the reversal detector, the preview or the insert. The
+    // sign itself is one of the two ways a bank marks a reversal (the other
+    // is the same amount posting once in each column); amounts are still
+    // normalised to a positive value, only the row itself is no longer
+    // dropped just for carrying a sign.
+    if (credit !== 0) {
+      const amount = Math.abs(credit)
       let txnId: string
       if (ref) {
         txnId = ref
       } else {
-        const baseId = await generateFallbackTransactionId(String(date), String(credit), desc, bankName)
-        const count  = inflowIdCounts.get(baseId) ?? 0
-        inflowIdCounts.set(baseId, count + 1)
-        txnId = count === 0 ? baseId : `${baseId}-${count}`
+        // No suffixing: two rows hashing alike are identical rows, and
+        // ref_occurrence is what separates them now.
+        txnId = await generateFallbackTransactionId(String(date), String(amount), desc, bankName)
       }
       rows.push({
-        ri, kind: 'inflow', date, amount: credit, description: desc, ref, txnId,
-        isDuplicate: false, config: emptyRowConfig(), resolution: 'unresolved',
+        ri, kind: 'inflow', date, amount, description: desc, ref, txnId,
+        isDuplicate: false, refOccurrence: 0, config: emptyRowConfig(), resolution: 'unresolved',
       })
     }
 
@@ -205,10 +208,7 @@ export async function buildImportRows(
                         : ''
         txnId = chargeTag ? `${ref}${chargeTag}` : ref
       } else {
-        const baseId = await generateFallbackTransactionId(String(date), String(debit), desc, bankName)
-        const count  = outflowIdCounts.get(baseId) ?? 0
-        outflowIdCounts.set(baseId, count + 1)
-        txnId = count === 0 ? baseId : `${baseId}-${count}`
+        txnId = await generateFallbackTransactionId(String(date), String(debit), desc, bankName)
       }
       const config = emptyRowConfig()
       // Seed stage codes from mapped spreadsheet columns when present.
@@ -218,7 +218,7 @@ export async function buildImportRows(
         ? String(raw[idx.s2]).trim() : ''
       rows.push({
         ri, kind: 'outflow', date, amount: debit, description: desc, ref, txnId,
-        isDuplicate: false, config, resolution: config.stageCode1 ? 'rule' : 'unresolved',
+        isDuplicate: false, refOccurrence: 0, config, resolution: config.stageCode1 ? 'rule' : 'unresolved',
       })
     }
   }
@@ -233,24 +233,59 @@ export function collectTxnIds(rows: ImportRow[], kind: 'inflow' | 'outflow'): st
 }
 
 /**
- * Mark rows whose transaction ID already exists in the database.
- * Returns `{ total, newCount, dupCount }` for the Step 4 summary banner.
+ * Mark rows the database already holds, and assign each surviving row its
+ * occurrence index.
+ *
+ * Identity is the whole row — reference, date, amount, description — not the
+ * reference. Matching on the reference alone marked a transfer's fee as a
+ * duplicate of the transfer itself, because a bank posts both under one Session
+ * ID, and silently dropped a real transaction.
+ *
+ * Counts, not presence: a statement can legitimately carry the same row twice
+ * (a failed transfer, reversed and retried). If the database already holds one
+ * of them, exactly one is skipped and the other is imported — numbered
+ * `ref_occurrence = 1` so it can coexist with the stored row rather than
+ * colliding with it.
+ *
+ * `existingCounts` is consumed as it goes, so it must be a private copy.
+ * `forceSkipRefs` carries the user's explicit "skip these" choice from the
+ * Import page pre-stage, which is expressed as bare references.
  */
 export function markDuplicates(
   rows: ImportRow[],
-  existingInflowRefs: Set<string>,
-  existingOutflowIds: Set<string>,
+  existingInflowCounts: Map<string, number>,
+  existingOutflowCounts: Map<string, number>,
+  forceSkipRefs?: Set<string>,
 ): { total: number; newCount: number; dupCount: number } {
   // A statement row producing both a credit and a debit entry is counted once,
   // matching the original per-row duplicate statistics.
-  const seenRis    = new Set<number>()
-  const dupRis     = new Set<number>()
+  const seenRis = new Set<number>()
+  const dupRis  = new Set<number>()
+
+  // Copies: the caller's maps stay intact for a re-run (the user can step back
+  // and forward through the wizard).
+  const remaining = {
+    inflow:  new Map(existingInflowCounts),
+    outflow: new Map(existingOutflowCounts),
+  }
+  // How many rows carried each identity before this import — the occurrence
+  // numbering continues from there so a statement imported in overlapping
+  // parts keeps counting up instead of restarting at 0.
+  const occCounters = new Map<string, number>()
 
   for (const row of rows) {
-    const existing = row.kind === 'inflow' ? existingInflowRefs : existingOutflowIds
-    if (existing.has(normalizeId(row.txnId))) {
+    const side = row.kind === 'inflow' ? 'inflow' : 'outflow'
+    const fp = rowFingerprint(row.txnId, row.date, row.amount, row.description)
+
+    const held = remaining[side].get(fp) ?? 0
+    if (forceSkipRefs?.has(normalizeId(row.txnId)) || held > 0) {
+      if (held > 0) remaining[side].set(fp, held - 1)
       row.isDuplicate = true
+      row.refOccurrence = 0
       dupRis.add(row.ri)
+    } else {
+      const startAt = (row.kind === 'inflow' ? existingInflowCounts : existingOutflowCounts).get(fp) ?? 0
+      row.refOccurrence = nextOccurrence(occCounters, fp, startAt)
     }
     seenRis.add(row.ri)
   }

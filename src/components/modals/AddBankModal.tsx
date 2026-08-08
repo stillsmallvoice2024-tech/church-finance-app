@@ -22,6 +22,7 @@ import { propagateBankOpeningBalance } from '../../utils/bankOpeningBalance'
 import { allocatePercent } from '../../utils/financeMath'
 import { useAllocationStore } from '../../store/allocationStore'
 import { usePlan, TIER_DISPLAY_NAME } from '../../hooks/usePlan'
+import { bankNameExists, nextAvailableBankName } from '../../utils/bankNameDedupe'
 
 const ACCOUNT_TYPES  = ['Current', 'Savings', 'Fixed Deposit', 'Domiciliary'] as const
 const BUDGET_PORTIONS = ['Percentage Allocation', 'Specific Seed', 'Savings'] as const
@@ -129,6 +130,13 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
   const [rows,            setRows]            = useState<RowDraft[]>([{ category_name: '', budget_portion: '', value: '', apply_to_category: true }])
   const [allocError,      setAllocError]      = useState<string | null>(null)
   const [newCatMode,      setNewCatMode]      = useState<NewCatMode | null>(null)
+  // Set when the submitted name collides with another bank in this org. The
+  // save is held until the user names the account distinctly — or accepts the
+  // auto-generated " - N" suffix. resolvedName carries their answer back into
+  // the resubmit; a ref because onSubmit reads it in the same tick.
+  const [nameConflict,  setNameConflict]  = useState<{ attempted: string; suggested: string } | null>(null)
+  const [conflictInput, setConflictInput] = useState('')
+  const resolvedNameRef = useRef<string | null>(null)
   const [schemaStatus,   setSchemaStatus]   = useState<SchemaStatus>('ok')
   const [checkingSchema, setCheckingSchema] = useState(false)
   const [selectedConfigId, setSelectedConfigId] = useState('')
@@ -210,6 +218,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     resetUpdate()
     setAllocError(null)
     setNewCatMode(null)
+    setNameConflict(null)
+    setConflictInput('')
+    resolvedNameRef.current = null
     setSchemaStatus('ok')
     setSelectedConfigId('')
     cacheRetryCount.current = 0
@@ -318,6 +329,25 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
 
   const onSubmit = async (values: FormValues) => {
     setAllocError(null)
+
+    // Bank names are unique per org (banks_org_name_unique) because bank_name is
+    // the denormalised key BankLedger reads by and the transaction-ref indexes
+    // scope on. Two accounts at the same bank is a normal thing to want, so ask
+    // for a differentiator rather than rejecting the name outright.
+    const otherBankNames = existingBanks
+      .filter(b => b.id !== editRecord?.id)
+      .map(b => b.name ?? '')
+    const submittedName = values.name.replace(/\s+/g, ' ').trim()
+    if (resolvedNameRef.current === null && bankNameExists(submittedName, otherBankNames)) {
+      const suggested = nextAvailableBankName(submittedName, otherBankNames)
+      setNameConflict({ attempted: submittedName, suggested })
+      setConflictInput(suggested)
+      return
+    }
+    const bankName = resolvedNameRef.current ?? submittedName
+    resolvedNameRef.current = null
+    setNameConflict(null)
+
     if (hasBalance) {
       if (allocType === 'config') {
         if (!selectedConfigId) { setAllocError('Select a budget plan to apply.'); return }
@@ -360,7 +390,7 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
     // for basic bank creation.
     const bankCurrency = values.currency || defaultCurrency || ''
     const payload: AddBankInput = {
-      name:               values.name,
+      name:               bankName,
       account_number:     values.account_number || undefined,
       account_type:       values.account_type   || undefined,
       currency:           bankCurrency,
@@ -380,9 +410,9 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
       // ── Propagate Balance Brought Forward into bank ledger ────────────────────
       try {
         await propagateBankOpeningBalance(
-          values.name,
+          bankName,
           values.starting_balance ?? null,
-          isEdit && editRecord && editRecord.name !== values.name ? editRecord.name : undefined,
+          isEdit && editRecord && editRecord.name !== bankName ? editRecord.name : undefined,
         )
       } catch (e) {
         console.error('[bank-modal] B/F propagation failed', e)
@@ -574,6 +604,53 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             <p className="text-xs text-gray-400 mt-0.5">The Cash bank is managed automatically and can't be renamed.</p>
           )}
         </Field>
+
+        {nameConflict && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-3 space-y-2">
+            <div className="flex items-start gap-2 text-sm text-amber-800 dark:text-amber-200">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                You already have an account named <strong>{nameConflict.attempted}</strong>. Give
+                this one something that tells them apart — the account type, the last four digits,
+                or what it's used for. Leave it as suggested and we'll number it for you.
+              </span>
+            </div>
+            <input
+              type="text"
+              value={conflictInput}
+              onChange={e => setConflictInput(e.target.value)}
+              placeholder={nameConflict.suggested}
+              className={inputCls(false)}
+              aria-label="Distinct bank name"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const chosen = conflictInput.replace(/\s+/g, ' ').trim()
+                  // An empty or still-colliding entry falls back to the
+                  // auto-numbered name rather than bouncing the user again.
+                  resolvedNameRef.current =
+                    chosen && !bankNameExists(chosen, existingBanks.filter(b => b.id !== editRecord?.id).map(b => b.name ?? ''))
+                      ? chosen
+                      : nameConflict.suggested
+                  setNameConflict(null)
+                  handleSubmit(onSubmit, focusFirstInvalid)()
+                }}
+                className="px-3 min-h-[36px] text-xs text-white bg-primary rounded-lg hover:bg-primary-light"
+              >
+                Save as this name
+              </button>
+              <button
+                type="button"
+                onClick={() => { setNameConflict(null); resolvedNameRef.current = null }}
+                className="px-3 min-h-[36px] text-xs text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <Field label="Account Number" error={errors.account_number?.message}>
           <input

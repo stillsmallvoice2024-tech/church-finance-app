@@ -34,7 +34,7 @@ function row(
   const complete = resolution === 'rule' || resolution === 'manual'
   return {
     ri, kind, date: '2026-03-01', amount, description,
-    ref: null, txnId: `id-${ri}`, isDuplicate: false,
+    ref: null, txnId: `id-${ri}`, isDuplicate: false, refOccurrence: 0,
     config: complete
       ? (kind === 'outflow' ? completeOutflowConfig() : { ...emptyRowConfig(), incomeTypeId: 'income-1' })
       : emptyRowConfig(),

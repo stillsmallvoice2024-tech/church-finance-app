@@ -50,6 +50,13 @@ export interface ImportRow {
   /** Bank ref or deterministic fallback hash. Used for dedup AND insert. */
   txnId:       string
   isDuplicate: boolean
+  /**
+   * Position among otherwise-identical rows in this statement (0 = first).
+   * A failed transfer that is reversed and retried posts twice under one
+   * Session ID with the same date, amount and narration; this is what keeps
+   * them distinct, so the bank's reference never has to be rewritten.
+   */
+  refOccurrence: number
   config:      ImportRowConfig
   resolution:  RowResolution
 }

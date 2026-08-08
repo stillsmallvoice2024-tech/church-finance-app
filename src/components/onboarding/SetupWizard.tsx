@@ -25,6 +25,7 @@ import { useAllocationStore } from '../../store/allocationStore'
 import { createGroupWithFirstVersion, setGeneralRuleLive, useSpecialConfigGroups } from '../../hooks/useSpecialConfigGroups'
 import { useToastStore } from '../../store/toastStore'
 import { friendlyError } from '../../utils/friendlyError'
+import { bankNameExists, nextAvailableBankName } from '../../utils/bankNameDedupe'
 import { WIZARD_STEPS } from '../../onboarding/wizard/definitions'
 import { getOrgTypeContent } from '../../onboarding/wizard/orgTypeContent'
 import type { OrgType } from '../../onboarding/wizard/orgTypeContent'
@@ -460,6 +461,8 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
   const [currency, setCurrency] = useState(defaultCurrency ?? 'NGN')
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState<string | null>(null)
+  const [nameConflict,  setNameConflict]  = useState<{ attempted: string; suggested: string } | null>(null)
+  const [conflictInput, setConflictInput] = useState('')
 
   useEffect(() => {
     if (defaultCurrency && !currency) setCurrency(defaultCurrency)
@@ -469,20 +472,35 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
     if (!loading) onDataReady(banks.length > 0)
   }, [banks, loading, onDataReady])
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name.trim()) return
+  const saveBank = async (bankName: string) => {
     setSaving(true); setError(null)
     try {
-      await addBank({ name: name.trim(), account_number: acctNum.trim() || undefined, currency })
-      toast(`${name.trim()} added`, 'success')
-      setName(''); setAcctNum('')
+      await addBank({ name: bankName, account_number: acctNum.trim() || undefined, currency })
+      toast(`${bankName} added`, 'success')
+      setName(''); setAcctNum(''); setNameConflict(null); setConflictInput('')
       refetch()
     } catch (err) {
       setError(friendlyError(err, 'save'))
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const submitted = name.replace(/\s+/g, ' ').trim()
+    if (!submitted) return
+
+    // Bank names are unique per org — two accounts at the same bank need
+    // something to tell them apart. Mirrors AddBankModal's prompt.
+    const existing = banks.map(b => b.name ?? '')
+    if (bankNameExists(submitted, existing)) {
+      const suggested = nextAvailableBankName(submitted, existing)
+      setNameConflict({ attempted: submitted, suggested })
+      setConflictInput(suggested)
+      return
+    }
+    await saveBank(submitted)
   }
 
   return (
@@ -523,11 +541,54 @@ function BanksStep({ onDataReady }: { onDataReady: (ready: boolean) => void }) {
           <input
             type="text"
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => { setName(e.target.value); setNameConflict(null) }}
             placeholder="Bank name (e.g. GTBank, Access Bank…)"
             className={`${inputCls} flex-1`}
           />
         </div>
+        {nameConflict && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 px-3 py-3 space-y-2">
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              You already have an account named <strong>{nameConflict.attempted}</strong>. Give this
+              one something that tells them apart — the account type, the last four digits, or what
+              it's used for. Leave it as suggested and we'll number it for you.
+            </p>
+            <input
+              type="text"
+              value={conflictInput}
+              onChange={e => setConflictInput(e.target.value)}
+              placeholder={nameConflict.suggested}
+              className={inputCls}
+              aria-label="Distinct bank name"
+            />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  const chosen = conflictInput.replace(/\s+/g, ' ').trim()
+                  // Empty or still-colliding falls back to the auto-numbered
+                  // name rather than bouncing the user again.
+                  void saveBank(
+                    chosen && !bankNameExists(chosen, banks.map(b => b.name ?? ''))
+                      ? chosen
+                      : nameConflict.suggested,
+                  )
+                }}
+                className="px-3 min-h-[36px] text-xs text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60"
+              >
+                Save as this name
+              </button>
+              <button
+                type="button"
+                onClick={() => setNameConflict(null)}
+                className="px-3 min-h-[36px] text-xs text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         <input
           type="text"
           value={acctNum}

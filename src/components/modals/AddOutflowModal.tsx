@@ -6,6 +6,8 @@ import { z } from 'zod'
 import { ExternalLink, Info } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { generateFallbackTransactionId } from '../../utils/generateTransactionId'
+import { countIdenticalManualEntries } from '../../utils/manualEntryDuplicate'
+import { useOrgStore } from '../../store/orgStore'
 import { Modal, type ModalHandle } from '../ui/Modal'
 import { TechDetails } from '../ui/TechDetails'
 import { Field, inputCls, focusFirstInvalid, DateQuickChips } from '../ui/FormField'
@@ -81,6 +83,11 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
   const isEdit = !!editRecord
   const [isPending,    setIsPending]    = useState(false)
   const [dupError,     setDupError]     = useState<string | null>(null)
+  // Held save while the user confirms whether an identical entry is genuinely
+  // a second one — see the confirmation panel below.
+  const [pendingDup,   setPendingDup]   = useState<{ count: number } | null>(null)
+  const confirmedDupRef = useRef(false)
+  const orgId = useOrgStore(s => s.orgId)
   const [rootTxnLink,    setRootTxnLink]    = useState<RootTxnLink | null>(null)
   const [rootPropagated, setRootPropagated] = useState(false)
 
@@ -223,6 +230,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
 
   const onSubmit = async (values: FormValues) => {
     setDupError(null)
+    setPendingDup(null)
     try {
       if (isEdit && editRecord) {
         await update({
@@ -257,13 +265,30 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
       } else {
         const txnId = values.transaction_id?.trim()
           || await generateFallbackTransactionId(values.date, String(values.amount_disbursed), values.description ?? values.bank_description ?? '', values.bank_name ?? '')
-        let dupQ = supabase.from('outflow_transactions').select('id').eq('transaction_id', txnId)
-        if (values.bank_name) dupQ = dupQ.eq('bank_name', values.bank_name)
-        const { data: dup } = await dupQ.limit(1)
-        if (dup && dup.length > 0) {
-          setDupError('Duplicate: an outflow with this transaction ID already exists for the selected bank.')
+
+        // The previous check was also missing an org filter, so an outflow in
+        // ANY org the user belongs to could block this one.
+        if (!orgId) {
+          setDupError('No active organisation — please reload and try again.')
           return
         }
+        // Identical outflows — same ref, date, amount, description and bank.
+        // Leaving the ref blank hashes those into it, so two separate payments
+        // of the same amount on one day collide. Ask rather than reject; the
+        // confirmed one is stored at the next occurrence.
+        const identical = await countIdenticalManualEntries({
+          table: 'outflow_transactions', refColumn: 'transaction_id',
+          amountColumn: 'amount_disbursed', descColumn: 'description',
+          orgId, bankName: values.bank_name || null,
+          ref: txnId, date: values.date, amount: values.amount_disbursed,
+          description: values.description ?? null,
+        })
+        if (identical > 0 && !confirmedDupRef.current) {
+          setPendingDup({ count: identical })
+          return
+        }
+        const refOccurrence = confirmedDupRef.current ? identical : 0
+        confirmedDupRef.current = false
         const input: AddOutflowInput = {
           date:                    values.date,
           amount_disbursed:        values.amount_disbursed,
@@ -273,6 +298,7 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
           description:             values.description             || undefined,
           bank_description:        values.bank_description        || undefined,
           transaction_id:          txnId,
+          ref_occurrence:          refOccurrence,
           stage_code_1:            values.stage_code_1            || undefined,
           stage_code_2:            values.stage_code_2            || undefined,
           outflow_type_id:         values.outflow_type_id         || null,
@@ -355,6 +381,38 @@ export function AddOutflowModal({ open, onClose, onSuccess, editRecord }: Props)
         {dupError && (
           <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
             {dupError}
+          </div>
+        )}
+
+        {pendingDup && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 px-4 py-3 space-y-2">
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              You already have {pendingDup.count === 1 ? 'an outflow' : `${pendingDup.count} outflows`} recorded
+              with this same date, amount and description
+              {watch('bank_name') ? ` for ${watch('bank_name')}` : ''}. Is this a genuinely
+              separate payment, or did the first save already go through?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => {
+                  confirmedDupRef.current = true
+                  setPendingDup(null)
+                  void handleSubmit(onSubmit)()
+                }}
+                className="px-3 min-h-[36px] text-xs text-white bg-primary rounded-lg hover:bg-primary-light disabled:opacity-60"
+              >
+                Yes, record it as a separate outflow
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingDup(null)}
+                className="px-3 min-h-[36px] text-xs text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
