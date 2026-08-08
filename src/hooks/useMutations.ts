@@ -6,6 +6,13 @@ import { useTransactionSyncStore } from '../store/transactionSyncStore'
 import { resolveEffectiveTier, QUANTITY_LIMITS } from './usePlan'
 import { normalizeId } from '../utils/normalizeId'
 import type { StartingBalanceRow } from './useBanks'
+import {
+  cascadeCategoryRename,
+  countCategoryReferences,
+  describeCategoryReferences,
+  resolveCategoryId,
+} from '../utils/categoryReferences'
+import { invalidateFundBuckets } from '../utils/fundBuckets'
 
 const BULK_CHUNK_SIZE = 500
 
@@ -102,6 +109,35 @@ async function batchLogFieldChanges(_rows: Array<{
   new_value: string | null
 }>): Promise<void> {}
 
+
+// A stage_code_1 edit moves the row to a different fund. intra_flows keys funds
+// by account_from/account_to instead, and has its own *_category_id columns, so
+// it is left alone here.
+async function syncCategoryIdOnUpdate(
+  table: string,
+  updates: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (table !== 'inflow_transactions' && table !== 'outflow_transactions') return updates
+  if (!('stage_code_1' in updates) || 'category_id' in updates) return updates
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) return updates
+  const name = updates.stage_code_1
+  if (typeof name !== 'string' || !name) return { ...updates, category_id: null }
+  return { ...updates, category_id: await resolveCategoryId(orgId, name) }
+}
+
+// Fund linkage: stamp category_id from the stage_code_1 name at insert time so
+// the row survives a later rename. stage_code_1 stays as the display snapshot.
+async function withCategoryId<T extends { stage_code_1?: string; category_id?: string | null }>(
+  input: T,
+): Promise<T> {
+  if (input.category_id || !input.stage_code_1) return input
+  const { orgId } = useOrgStore.getState()
+  if (!orgId) return input
+  const id = await resolveCategoryId(orgId, input.stage_code_1)
+  return id ? { ...input, category_id: id } : input
+}
+
 // ── Input types ────────────────────────────────────────────────────────────────
 
 export interface AddInflowInput {
@@ -128,6 +164,7 @@ export interface AddInflowInput {
   transaction_type?: string
   original_transaction_id?: string
   income_type_id?: string
+  category_id?: string | null
   bank_name?: string
   bank_id?: string | null
   recorded_at?: string
@@ -160,6 +197,7 @@ export interface AddOutflowInput {
   original_transaction_id?: string
   outflow_type_id?: string | null
   department_id?: string | null
+  category_id?: string | null
   bank_name?: string
   bank_id?: string | null
   recorded_at?: string
@@ -217,9 +255,10 @@ export function useAddInflow(): MutationHook<AddInflowInput, string> {
     setError(null)
 
     try {
+      const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('inflow_transactions')
-        .insert({ ...normalizeRefFields(input), created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(payload), created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -265,9 +304,10 @@ export function useAddOutflow(): MutationHook<AddOutflowInput, string> {
     setError(null)
 
     try {
+      const payload = await withCategoryId(input)
       const { data, error: err } = await supabase
         .from('outflow_transactions')
-        .insert({ ...normalizeRefFields(input), is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
+        .insert({ ...normalizeRefFields(payload), is_pending_deduction: input.is_pending_deduction ?? false, created_by: user.id, ...orgPayload() })
         .select('id')
         .single()
 
@@ -390,7 +430,13 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
         .eq('id', id)
         .single()
 
-      const normalized = normalizeRefFields(updates)
+      // Never let the client repoint a row to another tenant/owner or forge its id.
+      const { id: _id, org_id: _orgId, created_by: _createdBy, updated_at: _updatedAt, ...safeUpdates } = updates
+
+      // A stage_code_1 edit repoints the row at a different fund — re-resolve
+      // category_id so the authoritative link follows the displayed name.
+      const resolved = await syncCategoryIdOnUpdate(table, safeUpdates)
+      const normalized = normalizeRefFields(resolved)
 
       // Only inflow_transactions and outflow_transactions have updated_at
       const withTimestamp = table !== 'intra_flows'
@@ -399,14 +445,27 @@ export function useUpdateTransaction(table: UpdatableTable): MutationHook<Update
 
       // Use .select('id') without head:true — head:true changes the method to HEAD
       // which reads without writing, causing silent no-ops that appear successful.
-      const { data: updatedRows, error: err } = await supabase
-        .from(table)
-        .update(withTimestamp)
-        .eq('id', id)
-        .select('id')
+      let query = supabase.from(table).update(withTimestamp).eq('id', id)
+
+      // Optimistic locking: only write if the row hasn't changed since it was loaded.
+      // A zero-row result then means "someone else saved first" rather than "not found".
+      const originalUpdatedAt = (oldData as { updated_at?: string } | null)?.updated_at
+      if (originalUpdatedAt) {
+        query = query.eq('updated_at', originalUpdatedAt)
+      }
+
+      const { data: updatedRows, error: err } = await query.select('id')
 
       if (err) throw err
       if (!updatedRows?.length) {
+        if (originalUpdatedAt) {
+          const { data: stillExists } = await supabase.from(table).select('id').eq('id', id).maybeSingle()
+          throw new Error(
+            stillExists
+              ? 'This record was changed by someone else since you opened it. Please reload and try again.'
+              : 'Record not found or update blocked by permissions.',
+          )
+        }
         throw new Error('Record not found or update blocked by permissions.')
       }
 
@@ -693,6 +752,18 @@ export function useUpdateCategory(): MutationHook<UpdateCategoryInput> {
         .select('id')
       if (err) throw err
       if (!updatedRows?.length) throw new Error('Category not found or update was denied.')
+
+      // Fund linkage is by name (stage_code_1 / account_from / rows[].category_name),
+      // so a rename must be cascaded or every historical row is orphaned.
+      const oldName = (oldData as { name?: string } | null)?.name
+      const orgId   = useOrgStore.getState().orgId
+      if (oldName && orgId && oldName !== input.name) {
+        await cascadeCategoryRename(orgId, oldName, input.name)
+        // The shared fund-bucket cache is keyed by fund name; a rename changes
+        // every key without bumping a transaction-sync version.
+        invalidateFundBuckets()
+      }
+
       logAudit({ userId: user.id, action: 'UPDATE', tableName: 'categories', recordId: input.id, oldData: (oldData ?? null) as Record<string, unknown> | null, newData: updates as unknown as Record<string, unknown> })
       if (oldData) logFieldChanges(user.id, 'categories', input.id, oldData as Record<string, unknown>, updates as Record<string, unknown>)
     } catch (err) {
@@ -714,8 +785,24 @@ export function useDeleteCategory(): MutationHook<string> {
     if (!user?.id) throw new Error('You must be signed in.')
     setLoading(true); setError(null)
     try {
-      const { error: err } = await supabase.from('categories').delete().eq('id', id)
+      // Referential guard: without a FK, deleting a referenced fund leaves its money
+      // summed under a name that no longer exists in any dropdown.
+      const { data: cat } = await supabase.from('categories').select('name, org_id').eq('id', id).single()
+      const orgId = (cat as { org_id?: string } | null)?.org_id ?? useOrgStore.getState().orgId
+      const name  = (cat as { name?: string } | null)?.name
+      if (orgId && name) {
+        const refs = await countCategoryReferences(orgId, id, name)
+        if (refs.total > 0) {
+          throw new Error(
+            `"${name}" is still used by ${describeCategoryReferences(refs)}. ` +
+            'Hide the fund instead, or reassign those records first.',
+          )
+        }
+      }
+      const { error: err, count } = await supabase
+        .from('categories').delete({ count: 'exact' }).eq('id', id)
       if (err) throw err
+      if (count === 0) throw new Error('Category not found or delete was denied.')
       logAudit({ userId: user.id, action: 'DELETE', tableName: 'categories', recordId: id })
     } catch (err) {
       const msg = extractMessage(err); handleAuthError(err); setError(msg); throw new Error(msg)
@@ -1286,9 +1373,10 @@ export function useBulkUpdateTransaction(table: UpdatableTable) {
     let totalUpdated = 0
     const failures: BulkRowFailure[] = []
 
+    const resolvedBase = await syncCategoryIdOnUpdate(table, baseUpdates)
     const updates: Record<string, unknown> = table !== 'intra_flows'
-      ? { ...baseUpdates, updated_at: new Date().toISOString() }
-      : { ...baseUpdates }
+      ? { ...resolvedBase, updated_at: new Date().toISOString() }
+      : { ...resolvedBase }
 
     try {
       for (const chunk of chunkArray(ids, BULK_CHUNK_SIZE)) {

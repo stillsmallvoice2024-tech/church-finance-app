@@ -33,6 +33,21 @@ export class OcrUpgradeRequiredError extends Error {
   }
 }
 
+/**
+ * The server refused to authorise the OCR call — wrong plan, wrong role, or
+ * the org's daily page allowance is spent.
+ *
+ * Distinct from a per-page extraction failure because it will refuse every
+ * remaining page identically: the pipeline stops on it instead of walking a
+ * 40-page statement collecting forty copies of the same sentence.
+ */
+export class OcrRefusedError extends Error {
+  constructor(message: string, readonly reason: string) {
+    super(message)
+    this.name = 'OcrRefusedError'
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Phase = 'extracting' | 'password' | 'preview' | 'error'
@@ -73,23 +88,38 @@ function cellCls(confidence: number): string {
  * that is the difference between a user seeing "OCR failed" and seeing the
  * sentence that tells them what to fix.
  */
-async function describeInvokeFailure(error: unknown, data: unknown): Promise<string> {
-  const fromBody = (data as { error?: unknown } | null)?.error
-  if (typeof fromBody === 'string' && fromBody) return fromBody
-
-  const ctx = (error as { context?: unknown } | null)?.context
-  if (ctx && typeof (ctx as Response).text === 'function') {
-    const raw = await (ctx as Response).text().catch(() => '')
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as { error?: unknown }
-        if (parsed?.error) return String(parsed.error).slice(0, 400)
-      } catch { /* body was not JSON — fall through to the raw text */ }
-      return raw.slice(0, 400)
+async function describeInvokeFailure(
+  error: unknown,
+  data: unknown,
+): Promise<{ message: string; reason?: string }> {
+  const fromBody = (data as { error?: unknown; reason?: unknown } | null)
+  if (typeof fromBody?.error === 'string' && fromBody.error) {
+    return {
+      message: fromBody.error,
+      reason: typeof fromBody.reason === 'string' ? fromBody.reason : undefined,
     }
   }
 
-  return (error as Error | null)?.message || 'OCR failed'
+  const ctx = (error as { context?: unknown } | null)?.context
+  if (ctx && typeof (ctx as Response).text === 'function') {
+    // The body is a stream and can only be read once — parse it here and
+    // return everything the caller needs from this single pass.
+    const raw = await (ctx as Response).text().catch(() => '')
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { error?: unknown; reason?: unknown }
+        if (parsed?.error) {
+          return {
+            message: String(parsed.error).slice(0, 400),
+            reason: typeof parsed.reason === 'string' ? parsed.reason : undefined,
+          }
+        }
+      } catch { /* body was not JSON — fall through to the raw text */ }
+      return { message: raw.slice(0, 400) }
+    }
+  }
+
+  return { message: (error as Error | null)?.message || 'OCR failed' }
 }
 
 async function runOcrPipeline(
@@ -100,6 +130,16 @@ async function runOcrPipeline(
   Pick<ExtractionResult, 'headers' | 'rawRows' | 'confidence' | 'warnings' | 'pageCount'>
   & { rowPages: number[] }
 > {
+  // The server re-checks membership, role and plan against this org before it
+  // spends anything, so an absent id is a refusal, not something to paper over.
+  const orgId = useOrgStore.getState().orgId
+  if (!orgId) {
+    throw new OcrRefusedError(
+      'No active organisation is selected. Reload the page and try again.',
+      'no_org',
+    )
+  }
+
   const pageCount = await getPdfPageCount(file, password)
   onProgress({ current: 0, total: pageCount, statusText: 'Scanned PDF detected, starting OCR…' })
 
@@ -117,11 +157,15 @@ async function runOcrPipeline(
     // Scale omitted so the renderer fits each page to the model's resolution cap.
     const base64 = await renderPageToBase64(file, p, undefined, password)
     const { data, error } = await supabase.functions.invoke('pdf-ocr', {
-      body: { image: base64, mimeType: 'image/png', pageNumber: p },
+      body: { image: base64, mimeType: 'image/png', pageNumber: p, orgId },
     })
 
     if (error || !data?.ok) {
-      allWarnings.push(`Page ${p}: ${await describeInvokeFailure(error, data)}`)
+      const { message, reason } = await describeInvokeFailure(error, data)
+      // A refusal applies to every remaining page too — stop rather than
+      // repeat it once per page.
+      if (reason) throw new OcrRefusedError(message, reason)
+      allWarnings.push(`Page ${p}: ${message}`)
       continue
     }
 
@@ -291,6 +335,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
         setPhase('error')
         return
       }
+      if (e instanceof OcrRefusedError) {
+        setExtractErrorTitle(
+          e.reason === 'daily_quota_exceeded' ? 'Daily OCR limit reached'
+          : e.reason === 'plan_too_low'       ? 'OCR requires the Clariva Impact plan'
+                                             : 'OCR not available',
+        )
+        setExtractError(e.message)
+        setPhase('error')
+        return
+      }
       setExtractError(e instanceof Error ? e.message : 'Extraction failed')
       setPhase('error')
     }
@@ -329,6 +383,16 @@ export function PdfConverterOverlay({ file, onConfirm, onCancel }: Props) {
       }
       if (e instanceof PdfDecryptError) {
         setExtractErrorTitle('Unable to open this PDF')
+        setExtractError(e.message)
+        setPhase('error')
+        return
+      }
+      if (e instanceof OcrRefusedError) {
+        setExtractErrorTitle(
+          e.reason === 'daily_quota_exceeded' ? 'Daily OCR limit reached'
+          : e.reason === 'plan_too_low'       ? 'OCR requires the Clariva Impact plan'
+                                             : 'OCR not available',
+        )
         setExtractError(e.message)
         setPhase('error')
         return

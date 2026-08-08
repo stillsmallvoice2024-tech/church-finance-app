@@ -9,6 +9,7 @@ import { Field, inputCls, focusFirstInvalid } from '../ui/FormField'
 import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { useAddBank, useUpdateBank, useAddCategory, type AddBankInput } from '../../hooks/useMutations'
 import { useCategories, upsertCategoryOpeningBalance, deleteCategoryOpeningBalance, type BudgetPortion } from '../../hooks/useCategories'
+import { invalidateFundBuckets } from '../../utils/fundBuckets'
 import { useCurrencies } from '../../hooks/useCurrencies'
 import { useOrgStore } from '../../store/orgStore'
 import { useOrgCurrency } from '../../hooks/useOrgCurrency'
@@ -467,6 +468,10 @@ export function AddBankModal({ open, onClose, onSuccess, editRecord }: Props) {
             propagateErrors.push(`${row.category_name} (${row.budget_portion})`)
           }
         }
+
+        // Opening balances feed the fund buckets but bump no transaction-sync
+        // version, so the shared cache has to be dropped explicitly.
+        invalidateFundBuckets()
 
         if (propagateErrors.length > 0) {
           toast(

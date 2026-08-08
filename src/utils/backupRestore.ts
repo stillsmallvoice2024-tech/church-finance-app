@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { fetchAllRows } from './fetchAllRows'
 
 export const BACKUP_VERSION = '2'
 export const APP_VERSION    = '1.0.0'
@@ -32,23 +33,27 @@ export interface ManagedTableConfig {
   orgScoped?: boolean
 }
 
+/**
+ * `organizations` is deliberately NOT in this registry. It is the one
+ * instance-wide, not-org-scoped table left: exporting it means "every row
+ * the caller's RLS grants read on", which for a user in two orgs is both
+ * orgs' `organizations` row in one file — and restoring it from a
+ * hand-editable JSON file is an upsert of billing-adjacent columns
+ * (`plan_tier`, `stripe_*`) straight from user input. Org identity/settings
+ * are captured as a scalar snapshot in `_meta.orgSettings` instead (see
+ * `createBackup`) — informational only, never replayed on restore.
+ * (`currencies` is a normal org-scoped table below — see #476.)
+ */
+
 /** Ordered for restore: parents before children */
 export const MANAGED_TABLES: ManagedTableConfig[] = [
   {
-    key: 'organizations', label: 'Organisations', module: 'Configuration',
-    restorePriority: 0, backupEnabled: true, restoreMode: 'merge',
-    conflictColumn: 'id', orgScoped: false,
-    requiresMigration: false, sensitive: false, optional: false,
-    dependencies: [],
-    notes: 'Must be restored before org_members and all business tables',
-  },
-  {
     key: 'currencies', label: 'Currencies', module: 'Configuration',
     restorePriority: 1, backupEnabled: true, restoreMode: 'replace',
-    conflictColumn: 'code', orgScoped: false,
+    conflictColumn: 'id', orgScoped: true,
     requiresMigration: false, sensitive: false, optional: true,
     dependencies: [],
-    notes: 'PK is code, not id',
+    notes: 'Per-organisation currency list; code is unique within an org, not globally',
   },
   {
     key: 'category_groups', label: 'Fund Groups', module: 'Configuration',
@@ -243,16 +248,49 @@ export const MANAGED_TABLES: ManagedTableConfig[] = [
     requiresMigration: true, sensitive: false, optional: true,
     dependencies: [],
   },
+  // ── Audit trail ─────────────────────────────────────────────────────────────
+  // These three were previously unregistered: never backed up, yet hard-deleted
+  // by replace mode.  Registering them as `append` both captures them in the
+  // backup and excludes them from DELETE_TABLES, so a restore can never destroy
+  // the record of what the data used to be.
+  {
+    key: 'receipts', label: 'Receipts', module: 'Audit',
+    restorePriority: 90, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: false, optional: true,
+    dependencies: [],
+    notes: 'metadata rows only — the stored files live in the `backups`/receipt buckets and are not part of this backup',
+  },
+  {
+    key: 'audit_log', label: 'Audit Log', module: 'Audit',
+    restorePriority: 91, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: true, optional: true,
+    dependencies: [],
+    notes: 'append-only: never deleted in replace mode',
+  },
+  {
+    key: 'field_changes', label: 'Field Change Log', module: 'Audit',
+    restorePriority: 92, backupEnabled: true, restoreMode: 'append',
+    conflictColumn: 'id', orgScoped: true,
+    requiresMigration: false, sensitive: true, optional: true,
+    dependencies: [],
+    notes: 'append-only: never deleted in replace mode',
+  },
 ]
 
 /** Backward compat alias */
 export const BACKUP_TABLES = MANAGED_TABLES
 
 /** Delete order for replace mode — derived from registry, never stale.
- *  Excludes append-mode tables (they are never deleted). */
+ *  Excludes append-mode tables (they are never deleted) and any remaining
+ *  non-org-scoped table: `deleteFull` can only scope a DELETE by `org_id`, so
+ *  a table without that column would be wiped instance-wide for every
+ *  tenant. (`organizations` is not in the registry at all — see the note
+ *  above MANAGED_TABLES. `currencies` is org-scoped and deletes normally.) */
 const DELETE_TABLES: string[] = [...MANAGED_TABLES]
   .reverse()
-  .filter(t => t.restoreMode !== 'append' && t.backupEnabled)
+  .filter(t => t.restoreMode !== 'append' && t.backupEnabled && t.orgScoped !== false)
   .map(t => t.key)
 
 /** Tables known to exist in the public schema but that are not application data */
@@ -261,6 +299,14 @@ const SYSTEM_TABLE_BLACKLIST = new Set([
   'schema_discovery_view', // it's a view but guard anyway
   'bank_schema_check',
 ])
+
+/**
+ * Never swept into the "unmanaged" raw export/restore path either. Without
+ * this it would silently reappear as an unmanaged table — undoing the point
+ * of pulling it out of MANAGED_TABLES above — the moment schema discovery is
+ * enabled.
+ */
+const NEVER_BACKUP_TABLES = new Set(['organizations'])
 
 export const SCHEMA_DISCOVERY_MIGRATION_SQL = `-- Enable automatic unmanaged table detection in backup system
 CREATE OR REPLACE VIEW public.schema_discovery_view
@@ -273,6 +319,19 @@ GRANT SELECT ON public.schema_discovery_view TO anon, authenticated;
 NOTIFY pgrst, 'reload schema';`
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Scalar, informational-only snapshot of org identity/settings. Deliberately
+ * NOT a raw table row: no `id` (nothing to upsert against), no plan/billing/
+ * Stripe columns. Never read back on restore — a human re-applies these by
+ * hand in Settings if needed after a restore into a fresh org.
+ */
+export interface OrgSettingsSnapshot {
+  name: string
+  timezone: string
+  defaultCurrency: string | null
+  fiscalYearStart: number
+}
 
 export interface BackupManifest {
   backupVersion: string
@@ -289,6 +348,8 @@ export interface BackupManifest {
   warnings: string[]
   schemaDiscoveryAvailable: boolean
   strictMode: boolean
+  /** Informational snapshot of the org this backup was taken from — not a restorable table. */
+  orgSettings?: OrgSettingsSnapshot
 }
 
 export interface BackupFileV2 {
@@ -341,6 +402,30 @@ export type RestoreSummary = RestoreSummaryV2
 export interface RestoreOptions {
   mode: 'merge' | 'replace'
   restoreUnmanaged: boolean
+  /**
+   * Required to proceed with a `replace` whose preflight reports a shortfall.
+   * The caller must have shown the user exactly how many rows will be lost.
+   */
+  acknowledgeDataLoss?: boolean
+}
+
+export interface ReplacePreflightTable {
+  key: string
+  label: string
+  liveRows: number
+  backupRows: number
+  /** Rows that exist live but are absent from the backup (0 when the backup is a superset). */
+  shortfall: number
+}
+
+export interface ReplacePreflight {
+  /** True when every table to be deleted is fully represented in the backup. */
+  safe: boolean
+  /** Only tables with shortfall > 0, worst first. */
+  shortfalls: ReplacePreflightTable[]
+  totalShortfall: number
+  /** Tables whose live count could not be read — treated as unsafe. */
+  unreadable: string[]
 }
 
 export interface RestoreResultV2 {
@@ -348,6 +433,15 @@ export interface RestoreResultV2 {
   managedRestored: string[]
   unmanagedRestored: string[]
   errors: { table: string; section: 'managed' | 'unmanaged'; message: string }[]
+  /**
+   * 'atomic'  — replayed by commit_restore(); delete+insert committed together,
+   *             so a failure left the ledger exactly as it was.
+   * 'staged'  — the legacy per-table path; a failure may have left the org
+   *             partially restored. Only reachable when the RPC is not installed.
+   */
+  path?: 'atomic' | 'staged'
+  /** Only set on the staged path when a failure aborted the run mid-flight. */
+  partiallyApplied?: boolean
 }
 
 /** Backward compat alias */
@@ -369,7 +463,7 @@ async function discoverSchemaTables(): Promise<{ tables: string[]; available: bo
   if (error) return { tables: [], available: false }
 
   const all = (data as { table_name: string }[]).map(r => r.table_name)
-  const filtered = all.filter(t => !SYSTEM_TABLE_BLACKLIST.has(t))
+  const filtered = all.filter(t => !SYSTEM_TABLE_BLACKLIST.has(t) && !NEVER_BACKUP_TABLES.has(t))
   return { tables: filtered, available: true }
 }
 
@@ -400,19 +494,108 @@ export async function compareRegistryToSchema(): Promise<SchemaCheckResult> {
 
 // ── Backup creation ────────────────────────────────────────────────────────────
 
+/**
+ * Thrown when a table export cannot be proven complete.  Never swallow this —
+ * an unprovable backup that is later restored in `replace` mode destroys the
+ * rows it failed to capture.
+ */
+export class BackupIntegrityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'BackupIntegrityError'
+  }
+}
+
+export interface TableFetchResult {
+  rows: Record<string, unknown>[]
+  warnings: string[]
+}
+
+/** PostgREST error for ordering/filtering on a column the table doesn't have. */
+const MISSING_COLUMN_RE = /does not exist|42703|column .* of relation/i
+
+/** Server-side row count for the same scope the export uses. `null` = unreachable. */
+async function countTableRows(tableKey: string, orgId?: string): Promise<number | null> {
+  let q = supabase.from(tableKey).select('*', { count: 'exact', head: true })
+  if (orgId) q = q.eq('org_id', orgId)
+  const { count, error } = await q
+  if (error) return null
+  return count ?? 0
+}
+
+/**
+ * Exports one table in full.
+ *
+ * Paged through `fetchAllRows` because PostgREST enforces a server-side
+ * db-max-rows cap (default 1000, see supabase/config.toml) that silently
+ * overrides any client `.limit()` — a single `.select('*')` returns the first
+ * 1000 rows with no error and no indication that anything was dropped.
+ *
+ * Every export is then asserted against an exact server-side count and the
+ * whole backup is aborted on a shortfall.
+ */
 export async function fetchTableData(
   tableKey: string,
   onProgress?: (status: 'running' | 'done' | 'error', count?: number) => void,
   orgId?: string,
-): Promise<Record<string, unknown>[]> {
+  opts?: { stableKey?: string },
+): Promise<TableFetchResult> {
   onProgress?.('running')
-  let q = supabase.from(tableKey).select('*').limit(100_000)
-  if (orgId) q = q.eq('org_id', orgId)
-  const { data, error } = await q
-  if (error) { onProgress?.('error'); return [] }
-  const rows = (data ?? []) as Record<string, unknown>[]
+  const warnings: string[] = []
+  const stableKey = opts?.stableKey ?? 'id'
+
+  const build = () => {
+    let q = supabase.from(tableKey).select('*')
+    if (orgId) q = q.eq('org_id', orgId)
+    return q
+  }
+
+  // Probe first: distinguishes "table absent / not readable" (skip, warn) from
+  // "table readable but export came back short" (hard fail).
+  const expected = await countTableRows(tableKey, orgId)
+  if (expected === null) {
+    warnings.push(`${tableKey}: not readable (missing table or denied by RLS) — exported as empty.`)
+    onProgress?.('done', 0)
+    return { rows: [], warnings }
+  }
+
+  let { data, error } = await fetchAllRows<Record<string, unknown>>(build, stableKey)
+
+  // Unmanaged tables discovered at runtime may have no `id` column at all; an
+  // ORDER BY on a missing column errors and would otherwise export as empty.
+  // Fall back to one unordered page — the count assertion below still refuses
+  // to let a >1-page table through on that path.
+  if (error && MISSING_COLUMN_RE.test(error.message)) {
+    warnings.push(
+      `${tableKey}: no '${stableKey}' column — paged export unavailable, fell back to a single unordered page.`,
+    )
+    const single = await build()
+    data  = (single.data ?? []) as Record<string, unknown>[]
+    error = single.error
+  }
+
+  if (error) {
+    onProgress?.('error')
+    throw new BackupIntegrityError(`${tableKey}: export failed — ${error.message}`)
+  }
+
+  const rows = data ?? []
+
+  if (rows.length < expected) {
+    // Re-count before failing: a concurrent delete between probe and export is
+    // a legitimate reason for a shortfall, truncation is not.
+    const recount = await countTableRows(tableKey, orgId)
+    if (recount === null || rows.length < recount) {
+      onProgress?.('error')
+      throw new BackupIntegrityError(
+        `${tableKey}: exported ${rows.length} of ${recount ?? expected} rows. ` +
+        'Backup aborted — an incomplete backup restored in replace mode would delete the missing rows.',
+      )
+    }
+  }
+
   onProgress?.('done', rows.length)
-  return rows
+  return { rows, warnings }
 }
 
 export type BackupProgressCallback = (
@@ -456,20 +639,27 @@ export async function createBackup(
   const managed: Record<string, Record<string, unknown>[]> = {}
   for (const def of MANAGED_TABLES.filter(t => t.backupEnabled)) {
     const tableOrgId = (def.orgScoped && orgId) ? orgId : undefined
-    const rows = await fetchTableData(def.key, (status, count) => {
+    // Page on the table's own PK — `currencies` keys on `code`, not `id`.
+    const res = await fetchTableData(def.key, (status, count) => {
       onProgress?.('managed', def.key, status, count)
-    }, tableOrgId)
-    managed[def.key] = rows
+    }, tableOrgId, { stableKey: def.conflictColumn })
+    managed[def.key] = res.rows
+    warnings.push(...res.warnings)
   }
 
   // 3. Export unmanaged tables (raw, unverified — no org filter, rely on RLS)
   const unmanaged: Record<string, Record<string, unknown>[]> = {}
   for (const tableKey of unmanagedKeys) {
-    const rows = await fetchTableData(tableKey, (status, count) => {
+    const res = await fetchTableData(tableKey, (status, count) => {
       onProgress?.('unmanaged', tableKey, status, count)
     })
-    unmanaged[tableKey] = rows
+    unmanaged[tableKey] = res.rows
+    warnings.push(...res.warnings)
   }
+
+  // 4. Org settings — scalar snapshot only, explicit safe column list. Never
+  // the raw row: that would carry plan_tier/stripe_* right back into the file.
+  const orgSettings = await fetchOrgSettingsSnapshot(orgId)
 
   return {
     _meta: {
@@ -484,9 +674,27 @@ export async function createBackup(
       warnings,
       schemaDiscoveryAvailable:  discoveryAvailable,
       strictMode:                options?.strictMode ?? false,
+      orgSettings,
     },
     managed,
     unmanaged,
+  }
+}
+
+async function fetchOrgSettingsSnapshot(orgId?: string): Promise<OrgSettingsSnapshot | undefined> {
+  if (!orgId) return undefined
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('name, timezone, default_currency, fiscal_year_start')
+    .eq('id', orgId)
+    .single()
+  if (error || !data) return undefined
+  const row = data as { name: string; timezone: string; default_currency: string | null; fiscal_year_start: number }
+  return {
+    name: row.name,
+    timezone: row.timezone,
+    defaultCurrency: row.default_currency,
+    fiscalYearStart: row.fiscal_year_start,
   }
 }
 
@@ -673,6 +881,45 @@ async function deleteFull(table: string, orgId: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
+/**
+ * Server-side snapshot taken before a `replace` restore deletes anything:
+ * compares each to-be-deleted table's live row count against what the backup
+ * actually carries.  A backup that is short — truncated, stale, or taken from
+ * a different org — is the one input that turns `replace` into data loss.
+ */
+export async function preflightReplace(
+  backup: BackupFileV2,
+  orgId: string,
+): Promise<ReplacePreflight> {
+  const shortfalls: ReplacePreflightTable[] = []
+  const unreadable: string[] = []
+
+  for (const tableKey of DELETE_TABLES) {
+    const def = MANAGED_TABLES.find(t => t.key === tableKey)
+    const liveRows = await countTableRows(tableKey, def?.orgScoped !== false ? orgId : undefined)
+    if (liveRows === null) { unreadable.push(tableKey); continue }
+    const backupRows = (backup.managed[tableKey] ?? []).length
+    if (backupRows < liveRows) {
+      shortfalls.push({
+        key: tableKey,
+        label: def?.label ?? tableKey,
+        liveRows,
+        backupRows,
+        shortfall: liveRows - backupRows,
+      })
+    }
+  }
+
+  shortfalls.sort((a, b) => b.shortfall - a.shortfall)
+
+  return {
+    safe: shortfalls.length === 0 && unreadable.length === 0,
+    shortfalls,
+    totalShortfall: shortfalls.reduce((s, t) => s + t.shortfall, 0),
+    unreadable,
+  }
+}
+
 export type RestoreProgressCallback = (
   section: 'managed' | 'unmanaged',
   key: string,
@@ -680,7 +927,129 @@ export type RestoreProgressCallback = (
   count?: number,
 ) => void
 
-export async function restoreFromBackup(
+// ── Atomic restore (commit_restore RPC) ───────────────────────────────────────
+
+/** Migration that installs the atomic path. Surfaced in operator-facing errors. */
+export const ATOMIC_RESTORE_MIGRATION = '20260806000002_atomic_restore_rpc.sql'
+
+/** Rows per staging insert. Chunking the *upload* is safe — only the commit
+ *  has to be atomic, and that is one RPC call regardless of payload size. */
+const STAGE_CHUNK_SIZE = 500
+
+/** PostgREST/Postgres signatures for "this migration has not been run". */
+function isNotInstalled(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  // PGRST202/PGRST205: function or table absent from the schema cache.
+  // 42883 undefined_function, 42P01 undefined_table.
+  if (['PGRST202', 'PGRST205', '42883', '42P01'].includes(err.code ?? '')) return true
+  return /schema cache|does not exist/i.test(err.message ?? '')
+}
+
+/**
+ * True when `commit_restore` and its staging tables are present, i.e. restore
+ * can run as a single transaction. False means the deployment is still on the
+ * legacy per-table path and `replace` mode is unsafe.
+ */
+export async function isAtomicRestoreAvailable(): Promise<boolean> {
+  const { error } = await supabase
+    .from('restore_allowed_tables')
+    .select('table_key', { head: true, count: 'exact' })
+    .limit(1)
+  return !error
+}
+
+/**
+ * Stages the whole payload, then replays it in one server-side transaction.
+ * Returns `null` (having touched nothing) when the migration is not installed,
+ * so the caller can decide what to do rather than silently degrading.
+ */
+async function restoreAtomic(
+  backup: BackupFileV2,
+  options: RestoreOptions,
+  orgId: string,
+  onProgress?: RestoreProgressCallback,
+): Promise<RestoreResultV2 | null> {
+  const active = MANAGED_TABLES.filter(def => {
+    const rows = backup.managed[def.key]
+    return def.backupEnabled && Array.isArray(rows) && rows.length > 0
+  })
+
+  const { data: batch, error: batchErr } = await supabase
+    .from('restore_batches')
+    .insert({ org_id: orgId } as never)
+    .select('id')
+    .single()
+
+  if (batchErr) {
+    if (isNotInstalled(batchErr)) return null
+    throw new Error(`Could not open a restore batch: ${batchErr.message}`)
+  }
+  const batchId = (batch as { id: string }).id
+
+  const abandon = async () => {
+    // Best-effort: staged rows are inert, and purge_stale_restore_batches()
+    // sweeps anything left behind.
+    await supabase.from('restore_batches').update({ status: 'aborted' } as never).eq('id', batchId)
+  }
+
+  try {
+    for (const def of active) {
+      const rows = backup.managed[def.key] as Record<string, unknown>[]
+      onProgress?.('managed', def.key, 'running')
+
+      for (let i = 0; i < rows.length; i += STAGE_CHUNK_SIZE) {
+        const { error } = await supabase
+          .from('restore_staging')
+          .insert({ batch_id: batchId, table_key: def.key, rows: rows.slice(i, i + STAGE_CHUNK_SIZE) } as never)
+        if (error) {
+          if (isNotInstalled(error)) { await abandon(); return null }
+          throw new Error(`${def.key}: staging failed — ${error.message}`)
+        }
+      }
+    }
+
+    const { error: commitErr } = await supabase.rpc('commit_restore', {
+      p_batch_id:              batchId,
+      p_mode:                  options.mode,
+      p_acknowledge_data_loss: options.acknowledgeDataLoss ?? false,
+    })
+
+    if (commitErr) {
+      if (isNotInstalled(commitErr)) { await abandon(); return null }
+      throw new Error(commitErr.message)
+    }
+  } catch (e) {
+    // Nothing was applied: the delete and the insert both live inside
+    // commit_restore's transaction, so a throw here means the ledger is
+    // untouched. Report per-table so the modal can stop showing spinners.
+    for (const def of active) onProgress?.('managed', def.key, 'error')
+    await abandon()
+    throw e instanceof Error ? e : new Error('Restore failed')
+  }
+
+  for (const def of active) {
+    onProgress?.('managed', def.key, 'done', (backup.managed[def.key] ?? []).length)
+  }
+
+  return {
+    success: true,
+    managedRestored: active.map(d => d.key),
+    unmanagedRestored: [],
+    errors: [],
+    path: 'atomic',
+  }
+}
+
+// ── Legacy path ───────────────────────────────────────────────────────────────
+
+/**
+ * Pre-RPC restore: each delete and each 500-row upsert is its own commit, so a
+ * failure anywhere leaves the org partially restored with no rollback. Retained
+ * only for deployments that have not run {@link ATOMIC_RESTORE_MIGRATION}, and
+ * it now fails fast — the first error aborts rather than pressing on. A
+ * half-restored ledger is worse than an aborted one: it looks valid.
+ */
+async function restoreStaged(
   backup: BackupFileV2,
   options: RestoreOptions,
   orgId: string,
@@ -689,17 +1058,35 @@ export async function restoreFromBackup(
   const managedRestored:   string[] = []
   const unmanagedRestored: string[] = []
   const errors: RestoreResultV2['errors'] = []
+  let destructiveStarted = false
 
   // ── Replace: delete in reverse dependency order ──────────────────────────────
+  // receipts / audit_log / field_changes are not wiped here — they are
+  // registered as append-mode tables, so DELETE_TABLES excludes them and the
+  // audit trail survives every restore.
   if (options.mode === 'replace') {
     for (const tableKey of DELETE_TABLES) {
-      try { await deleteFull(tableKey, orgId) } catch { /* non-fatal — table may be empty */ }
-    }
-    // Clear adjacent audit data too — org-scoped for the same reason.
-    for (const extra of ['receipts', 'audit_log', 'field_changes']) {
       try {
-        await supabase.from(extra).delete().eq('org_id', orgId).not('id', 'is', null)
-      } catch { /* non-fatal */ }
+        destructiveStarted = true
+        await deleteFull(tableKey, orgId)
+      } catch (e) {
+        // Abort before a single row is inserted. Continuing would delete the
+        // remaining tables and then insert on top of a partial wipe.
+        errors.push({
+          table: tableKey,
+          section: 'managed',
+          message: `Replace-mode delete failed: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        })
+        onProgress?.('managed', tableKey, 'error')
+        return {
+          success: false,
+          managedRestored,
+          unmanagedRestored,
+          errors,
+          path: 'staged',
+          partiallyApplied: true,
+        }
+      }
     }
   }
 
@@ -710,16 +1097,26 @@ export async function restoreFromBackup(
 
     onProgress?.('managed', def.key, 'running')
     try {
-      // In replace mode, append-mode tables skip delete (already excluded from DELETE_TABLES)
-      // and are always upserted
+      // In replace mode, append-mode tables skip delete (already excluded from
+      // DELETE_TABLES) and are always upserted
       await insertBatch(def.key, rows, def.conflictColumn)
       managedRestored.push(def.key)
+      destructiveStarted = true
       onProgress?.('managed', def.key, 'done', rows.length)
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
       errors.push({ table: def.key, section: 'managed', message: msg })
       onProgress?.('managed', def.key, 'error')
-      // Continue — partial restore is better than full abort
+      // Stop here: later tables reference this one, and every table restored
+      // after a failure widens the inconsistency.
+      return {
+        success: false,
+        managedRestored,
+        unmanagedRestored,
+        errors,
+        path: 'staged',
+        partiallyApplied: destructiveStarted,
+      }
     }
   }
 
@@ -750,7 +1147,75 @@ export async function restoreFromBackup(
     managedRestored,
     unmanagedRestored,
     errors,
+    path: 'staged',
   }
+}
+
+export async function restoreFromBackup(
+  backup: BackupFileV2,
+  options: RestoreOptions,
+  orgId: string,
+  onProgress?: RestoreProgressCallback,
+): Promise<RestoreResultV2> {
+  // Runs on both paths. commit_restore repeats the check server-side, but doing
+  // it here keeps the failure cheap and the message specific.
+  if (options.mode === 'replace') {
+    const preflight = await preflightReplace(backup, orgId)
+    if (!preflight.safe && !options.acknowledgeDataLoss) {
+      const detail = preflight.shortfalls
+        .slice(0, 5)
+        .map(t => `${t.label}: ${t.liveRows.toLocaleString()} live vs ${t.backupRows.toLocaleString()} in backup`)
+        .join('; ')
+      throw new Error(
+        'Replace aborted: the backup holds fewer rows than the live data, so replacing would ' +
+        `permanently delete ${preflight.totalShortfall.toLocaleString()} row(s). ` +
+        (detail ? `${detail}. ` : '') +
+        (preflight.unreadable.length > 0 ? `Could not read live counts for: ${preflight.unreadable.join(', ')}. ` : '') +
+        'Use merge mode, or re-confirm explicitly to proceed.',
+      )
+    }
+  }
+
+  const atomic = await restoreAtomic(backup, options, orgId, onProgress)
+
+  if (atomic) {
+    // Unmanaged tables are outside the allowlist and therefore outside the
+    // transaction. They are best-effort by definition and run only after the
+    // managed commit has succeeded.
+    if (options.restoreUnmanaged) {
+      for (const [tableKey, rows] of Object.entries(backup.unmanaged ?? {})) {
+        if (!Array.isArray(rows) || rows.length === 0) continue
+        onProgress?.('unmanaged', tableKey, 'running')
+        try {
+          await insertBatch(tableKey, rows, 'id')
+          atomic.unmanagedRestored.push(tableKey)
+          onProgress?.('unmanaged', tableKey, 'done', rows.length)
+        } catch (e) {
+          atomic.errors.push({
+            table: tableKey,
+            section: 'unmanaged',
+            message: e instanceof Error ? e.message : 'Unknown error',
+          })
+          onProgress?.('unmanaged', tableKey, 'error')
+        }
+      }
+    }
+    return atomic
+  }
+
+  // ── Fallback: migration not installed ───────────────────────────────────────
+  // `replace` without a transaction is the exact scenario the audit flagged:
+  // the delete can succeed and the insert fail, leaving nothing behind. Refuse
+  // it rather than offer a destructive best-effort.
+  if (options.mode === 'replace') {
+    throw new Error(
+      'Replace mode is unavailable: this database has not been migrated to atomic restore, ' +
+      `so the delete and the insert cannot be committed together. Run ${ATOMIC_RESTORE_MIGRATION}, ` +
+      'or use merge mode, which never deletes.',
+    )
+  }
+
+  return restoreStaged(backup, options, orgId, onProgress)
 }
 
 // ── File parsing ───────────────────────────────────────────────────────────────

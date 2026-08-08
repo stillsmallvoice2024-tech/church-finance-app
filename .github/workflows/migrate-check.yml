@@ -66,6 +66,43 @@ jobs:
             printf '%s\n' "$changed" > /tmp/new_migrations.txt
           fi
 
+      # Only enforced for migrations this PR adds/changes, not the pre-existing
+      # history (which predates this convention). Rollback scripts live in
+      # supabase/rollbacks/, not supabase/migrations/ (see supabase/rollbacks/README.md
+      # — an undo script left in migrations/ would run as if it were a forward
+      # migration), named to match: <ts>_desc.sql -> rollbacks/<ts>_desc_rollback.sql
+      - name: Require a paired rollback file for each new migration
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          status=0
+          while IFS= read -r f; do
+            base=$(basename "$f" .sql)
+            [[ "$base" == *_rollback ]] && continue
+            rollback="supabase/rollbacks/${base}_rollback.sql"
+            if [ ! -f "$rollback" ]; then
+              echo "::error file=$f::Missing paired rollback file: $(basename "$rollback")"
+              status=1
+            fi
+          done < /tmp/new_migrations.txt
+          exit $status
+
+      # The runner's stock postgresql-client is v16, but the Supabase local stack
+      # runs Postgres 17 — pg_dump refuses to dump from a newer server than itself.
+      # Install a matching client so the pg_dump calls below don't fail on that
+      # version check; steps that need it reference the versioned binary path
+      # directly rather than relying on this being first on PATH.
+      - name: Install PostgreSQL 17 client tools
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc > /dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+
       - name: Start local stack with an empty migration set
         if: steps.diff.outputs.has_new == 'true'
         run: |
@@ -82,8 +119,37 @@ jobs:
         run: |
           # Fixed local-dev connection defaults for the Supabase CLI, using this
           # repo's configured db port (supabase/config.toml [db] port).
-          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
-            -v ON_ERROR_STOP=1 -f supabase/schema.sql
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+
+          # `supabase start` provisions auth/storage/etc. (schema.sql assumes these
+          # exist and references them, e.g. auth.users) directly in this database via
+          # privileged bootstrap SQL that a plain `postgres`-role session can't always
+          # replay into a fresh database (e.g. SECURITY DEFINER functions setting
+          # session GUCs). Clone the database at the filesystem level instead — a
+          # template copy carries all of that over exactly, no replay needed — before
+          # schema.sql adds this repo's own tables, so the comparison database built
+          # later starts from the same point. CREATE DATABASE ... TEMPLATE requires no
+          # other sessions connected to the source; supabase start's services hold
+          # some, so terminate and retry a few times. Local Supabase mirrors its cloud
+          # security model: `postgres` is not the real superuser — `supabase_admin` is
+          # — so both the terminate and the templated createdb need that role.
+          for attempt in 1 2 3 4 5; do
+            PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -c "
+              SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+              WHERE datname = 'postgres' AND pid <> pg_backend_pid();
+            " > /dev/null
+            if PGPASSWORD=postgres createdb -h 127.0.0.1 -p 54322 -U supabase_admin -T postgres schema_sql_only 2>/tmp/createdb_err; then
+              break
+            fi
+            cat /tmp/createdb_err
+            if [ "$attempt" = 5 ]; then
+              echo "::error::Could not clone the pre-schema.sql database after 5 attempts."
+              exit 1
+            fi
+            sleep 2
+          done
+
+          psql "$DB" -v ON_ERROR_STOP=1 -f supabase/schema.sql
 
       - name: Apply this PR's new/changed migration(s) on top of the baseline
         if: steps.diff.outputs.has_new == 'true'
@@ -95,3 +161,39 @@ jobs:
               -v ON_ERROR_STOP=1 -f "$stashed"
             echo "::endgroup::"
           done < /tmp/new_migrations.txt
+
+      # Guards against exactly the drift this job exists to prevent: a
+      # migration merges but schema.sql — the fresh-install reference this
+      # repo ships and that CI itself treats as ground truth — never gets
+      # updated to match. Left unchecked, that gap is invisible until someone
+      # actually provisions a new environment from schema.sql (disaster
+      # recovery, staging, a second region) and it silently comes up missing
+      # the change. So: build a second, untouched database from schema.sql
+      # alone, and diff its post-migration structure against the one built
+      # above (schema.sql + this PR's migrations). A schema.sql that already
+      # reflects the PR's migrations converges to the same structure either
+      # way; any real difference means schema.sql needs the same update.
+      - name: Assert schema.sql already reflects this PR's migration(s)
+        if: steps.diff.outputs.has_new == 'true'
+        run: |
+          DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          BASELINE="postgresql://postgres:postgres@127.0.0.1:54322/schema_sql_only"
+
+          # schema_sql_only was already cloned from the pre-schema.sql database in the
+          # previous step, so it just needs schema.sql applied on top.
+          psql "$BASELINE" -v ON_ERROR_STOP=1 -f supabase/schema.sql
+
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --schema-only --no-owner --no-privileges \
+            | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
+            > /tmp/schema_plus_migrations.sql
+          /usr/lib/postgresql/17/bin/pg_dump "$BASELINE" --schema-only --no-owner --no-privileges \
+            | grep -Ev '^--|^SET |^SELECT pg_catalog|^\\restrict|^\\unrestrict|^$' \
+            > /tmp/schema_sql_only.sql
+
+          if ! diff -u /tmp/schema_sql_only.sql /tmp/schema_plus_migrations.sql; then
+            echo "::error::supabase/schema.sql does not yet reflect the migration(s) in this PR." \
+                 "Update schema.sql (fresh-install reference) so a database built from it alone" \
+                 "matches one built from schema.sql + these migrations. See the diff above."
+            exit 1
+          fi
+          echo "schema.sql already reflects this PR's migration(s) — no drift."

@@ -461,10 +461,12 @@ export function DistributionRulesTab({
   // in usePlan.ts. Re-fetches independently of SpecialConfigsTab below,
   // which is fine: it's the same cheap org-scoped query.
   const navigate = useNavigate()
-  const { quantityLimit } = usePlan()
+  const { quantityLimit, planLoading } = usePlan()
   const { groups: capGroups } = useSpecialConfigGroups()
   const customRuleLimit = quantityLimit('customDistributionRules')
-  const atCap = customRuleLimit !== null && capGroups.length >= customRuleLimit
+  // Held off until the tier is known — an unknown tier resolves to Start,
+  // whose cap is 0, which would read as "at cap" for every org on load.
+  const atCap = !planLoading && customRuleLimit !== null && capGroups.length >= customRuleLimit
 
   // Single guarded entry point for "create a custom rule" — passed to both
   // the header button below AND SpecialConfigsTab's own empty-state button,

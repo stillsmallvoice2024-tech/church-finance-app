@@ -67,6 +67,16 @@ create table public.organizations (
   plan_expires_at       timestamptz,
   imported_rows_count   int         not null default 0,
   imported_rows_period_start timestamptz not null default now(),
+  -- Max OCR pages per UTC day (20260807000002_ocr_quota). Enforced by
+  -- consume_ocr_page(); raise per-org via the service role if needed.
+  ocr_daily_page_limit  int         not null default 300,
+  -- Stripe linkage (20260806000000_stripe_billing). Written only by the
+  -- billing edge functions under the service role — see Section 12.
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  plan_status           text        not null default 'active'
+                        check (plan_status in ('active', 'trialing', 'past_due', 'canceled')),
+  trial_ends_at         timestamptz,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
@@ -75,6 +85,14 @@ create index if not exists idx_organizations_slug       on public.organizations(
 create index if not exists idx_organizations_created_by on public.organizations(created_by);
 create index if not exists idx_organizations_status     on public.organizations(status);
 create index if not exists idx_organizations_purge_at   on public.organizations(purge_at);
+
+create unique index if not exists organizations_stripe_customer_id_key
+  on public.organizations (stripe_customer_id)
+  where stripe_customer_id is not null;
+
+create unique index if not exists organizations_stripe_subscription_id_key
+  on public.organizations (stripe_subscription_id)
+  where stripe_subscription_id is not null;
 
 -- Organisation names are globally unique, case- and whitespace-insensitive.
 -- Identically named orgs would disguise any cross-org leak as correct data.
@@ -184,11 +202,19 @@ returns boolean as $$
   );
 $$ language sql security definer stable;
 
--- Returns the id of the bootstrap 'primary' org.
--- Used as the DEFAULT for org_id on all business tables (fresh install only).
+-- DEFAULT stub for org_id on all business-table columns. The application layer
+-- (orgPayload() in useMutations.ts, explicit org_id in all other hooks) always
+-- supplies org_id on every INSERT, so this DEFAULT must never actually fire.
+-- Raising here turns any future regression that omits org_id into an immediate,
+-- loud DB error instead of a silent cross-tenant leak.
 create or replace function public.get_current_org_id()
-returns uuid language sql security definer stable as $$
-  select id from public.organizations where slug = 'primary' limit 1;
+returns uuid language plpgsql security definer as $$
+begin
+  raise exception
+    'get_current_org_id() invoked — all INSERT statements must supply org_id explicitly. '
+    'This function exists only as a DEFAULT stub; it must never be called at runtime. '
+    'Ensure the calling code reads org_id from useOrgStore and passes it in the INSERT payload.';
+end;
 $$;
 
 -- is_org_member: any active role in p_org_id — used by SELECT policies.
@@ -274,6 +300,12 @@ begin
     raise exception 'not a member of this organization';
   end if;
 
+  -- SECURITY DEFINER doesn't change the JWT the request arrived with, so
+  -- guard_org_plan_columns() would see 'authenticated' and block the write
+  -- below. This is the one legitimate user-triggered change to a billing
+  -- column; the flag is transaction-local.
+  perform set_config('app.plan_guard_bypass', 'on', true);
+
   select imported_rows_period_start into v_period_start
   from public.organizations where id = p_org_id;
 
@@ -293,6 +325,97 @@ begin
   return v_new_count;
 end;
 $$;
+
+-- ── OCR spend control (20260807000002_ocr_quota) ─────────────────────────────
+-- The pdf-ocr Edge Function turns one request into one billed model call, so
+-- it must not be reachable on a valid JWT alone. consume_ocr_page() is the
+-- single authorising gate it calls before spending anything: membership, role
+-- and plan are checked server-side, then the org's daily page count is
+-- incremented under the upserted row's lock so concurrent pages cannot race
+-- past the cap. Service role only — granting it to authenticated would let any
+-- user burn their own org's allowance directly.
+create table if not exists public.ocr_usage (
+  org_id     uuid        not null references public.organizations(id) on delete cascade,
+  usage_date date        not null default (now() at time zone 'utc')::date,
+  pages      int         not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (org_id, usage_date)
+);
+
+create index if not exists idx_ocr_usage_date on public.ocr_usage(usage_date);
+
+-- RLS on with zero policies: denies anon and authenticated outright. The
+-- service role bypasses RLS; orgs see their usage via the RPC's return value.
+alter table public.ocr_usage enable row level security;
+revoke all on public.ocr_usage from anon, authenticated;
+
+create or replace function public.consume_ocr_page(
+  p_org_id  uuid,
+  p_user_id uuid,
+  p_pages   int default 1
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_role  text;
+  v_limit int;
+  v_used  int;
+  v_want  int := greatest(coalesce(p_pages, 1), 1);
+begin
+  -- p_user_id is passed explicitly: the caller holds the service role, so
+  -- auth.uid() is null and the is_org_*() helpers cannot be reused here.
+  select role into v_role
+  from public.org_members
+  where org_id = p_org_id
+    and user_id = p_user_id
+    and status  = 'active';
+
+  if v_role is null then
+    return jsonb_build_object('allowed', false, 'reason', 'not_a_member');
+  end if;
+
+  if v_role not in ('owner', 'admin', 'accountant') then
+    return jsonb_build_object('allowed', false, 'reason', 'role_not_permitted');
+  end if;
+
+  if not public.org_plan_at_least(p_org_id, 'full') then
+    return jsonb_build_object('allowed', false, 'reason', 'plan_too_low');
+  end if;
+
+  select ocr_daily_page_limit into v_limit
+  from public.organizations
+  where id = p_org_id;
+
+  insert into public.ocr_usage (org_id, usage_date, pages)
+  values (p_org_id, (now() at time zone 'utc')::date, 0)
+  on conflict (org_id, usage_date)
+    do update set pages = public.ocr_usage.pages
+  returning pages into v_used;
+
+  if v_used + v_want > v_limit then
+    return jsonb_build_object(
+      'allowed', false, 'reason', 'daily_quota_exceeded',
+      'used', v_used, 'limit', v_limit
+    );
+  end if;
+
+  -- Incremented only once all three gates pass, so a refusal costs the org
+  -- nothing from its own allowance.
+  update public.ocr_usage
+  set pages = pages + v_want, updated_at = now()
+  where org_id = p_org_id
+    and usage_date = (now() at time zone 'utc')::date
+  returning pages into v_used;
+
+  return jsonb_build_object('allowed', true, 'used', v_used, 'limit', v_limit);
+end;
+$$;
+
+revoke all on function public.consume_ocr_page(uuid, uuid, int) from public, anon, authenticated;
+grant execute on function public.consume_ocr_page(uuid, uuid, int) to service_role;
 
 -- is_admin: owner or admin in ANY active org — used by tables without org_id.
 create or replace function public.is_admin()
@@ -386,7 +509,9 @@ create table public.category_groups (
 -- ── Categories ────────────────────────────────────────────────────────────────
 create table public.categories (
   id          uuid        default gen_random_uuid() primary key,
-  name        text        not null unique,
+  -- Unique per ORG, not globally: two tenants must both be able to own a
+  -- category called "Tithes". A bare `unique` here is a multi-tenancy break.
+  name        text        not null,
   description text,
   group_id    uuid        references public.category_groups(id) on delete set null,
   is_hidden   boolean     not null default false,
@@ -394,7 +519,8 @@ create table public.categories (
   currency    text,
   org_id      uuid        not null default public.get_current_org_id()
               references public.organizations(id) on delete set null,
-  created_at  timestamptz default now()
+  created_at  timestamptz default now(),
+  constraint categories_org_name_key unique (org_id, name)
 );
 
 -- ── Banks ─────────────────────────────────────────────────────────────────────
@@ -591,6 +717,7 @@ create table public.inflow_transactions (
   description               text,
   amount                    numeric(15,2) not null default 0,
   stage_code_1              text,
+  category_id               uuid        references public.categories(id) on delete set null,
   stage_code_2              text,
   stage_code_3              text,
   transaction_ref           text,
@@ -622,6 +749,7 @@ create table public.inflow_transactions (
   created_at                timestamptz default now(),
   updated_at                timestamptz default now(),
   import_seq                bigint      generated always as identity,
+  import_batch_id           uuid,
   org_id                    uuid        not null default public.get_current_org_id()
                             references public.organizations(id) on delete set null
 );
@@ -638,6 +766,7 @@ create table public.outflow_transactions (
   transfer_charge         numeric(15,2) default 0,
   bank_total              numeric(15,2) default 0,
   stage_code_1            text,
+  category_id             uuid        references public.categories(id) on delete set null,
   stage_code_2            text,
   remarks                 text,
   bank_name               text,
@@ -662,6 +791,7 @@ create table public.outflow_transactions (
   created_at              timestamptz default now(),
   updated_at              timestamptz default now(),
   import_seq              bigint      generated always as identity,
+  import_batch_id         uuid,
   org_id                  uuid        not null default public.get_current_org_id()
                           references public.organizations(id) on delete set null
 );
@@ -690,6 +820,7 @@ create table public.intra_flows (
   org_id              uuid        not null default public.get_current_org_id()
                       references public.organizations(id) on delete set null,
   created_at          timestamptz default now(),
+  updated_at          timestamptz default now(),
   import_seq          bigint      generated always as identity
 );
 
@@ -808,6 +939,37 @@ create table public.invitation_emails (
   sent_at       timestamptz not null default now()
 );
 
+-- Caps invites per org per hour: org name and inviter name are both
+-- user-controllable and get emailed out under our sending domain, so an
+-- unbounded invite rate is an open phishing-blast vector.
+create or replace function public.enforce_invite_rate_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = public as $$
+declare
+  v_recent_count int;
+begin
+  select count(*) into v_recent_count
+  from public.invitations
+  where org_id = new.org_id
+    and created_at > now() - interval '1 hour';
+
+  if v_recent_count >= 20 then
+    raise exception 'Too many invitations sent recently. Please try again later.'
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists invitations_rate_limit on public.invitations;
+create trigger invitations_rate_limit
+  before insert on public.invitations
+  for each row
+  execute function public.enforce_invite_rate_limit();
+
 -- ── Audit Log ─────────────────────────────────────────────────────────────────
 create table public.audit_log (
   id         uuid        default gen_random_uuid() primary key,
@@ -817,7 +979,7 @@ create table public.audit_log (
   record_id  uuid,
   old_data   jsonb,
   new_data   jsonb,
-  org_id     uuid        references public.organizations(id) on delete set null,
+  org_id     uuid        not null references public.organizations(id) on delete set null,
   created_at timestamptz default now()
 );
 
@@ -830,7 +992,7 @@ create table public.field_changes (
   field_name text        not null,
   old_value  text,
   new_value  text,
-  org_id     uuid        references public.organizations(id) on delete set null,
+  org_id     uuid        not null references public.organizations(id) on delete set null,
   changed_at timestamptz default now()
 );
 
@@ -884,6 +1046,21 @@ create table public.report_templates (
               references public.organizations(id) on delete set null,
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
+);
+
+-- ── Import Batches ────────────────────────────────────────────────────────────
+-- One row per import run — lets the UI show/undo a specific run without
+-- scanning the transaction tables for stale ids.
+create table public.import_batches (
+  id           uuid        primary key default gen_random_uuid(),
+  org_id       uuid        not null references public.organizations(id) on delete cascade,
+  target_table text        not null,
+  file_name    text,
+  row_count    int         not null default 0,
+  status       text        not null default 'completed' check (status in ('completed', 'partial', 'undone')),
+  created_by   uuid        references public.profiles(id),
+  created_at   timestamptz not null default now(),
+  undone_at    timestamptz
 );
 
 -- ── Transaction Allocation Snapshots ─────────────────────────────────────────
@@ -946,14 +1123,49 @@ create table public.dynamic_report_snapshots (
 );
 
 -- ── Currencies ───────────────────────────────────────────────────────────────
+-- Org-scoped: each organisation owns its own currency list. Surrogate id PK
+-- (not code) so the table behaves like every other org-scoped table in the
+-- backup/restore registry; uniqueness of the code is per organisation.
 create table public.currencies (
-  code       text    primary key,
+  id         uuid    primary key default gen_random_uuid(),
+  org_id     uuid    not null references public.organizations(id) on delete cascade,
+  code       text    not null,
   name       text    not null,
   symbol     text    not null default '',
   flag       text,
   is_active  boolean not null default true,
-  sort_order integer not null default 99
+  sort_order integer not null default 99,
+  unique (org_id, code)
 );
+create index currencies_org_id_idx on public.currencies (org_id);
+
+-- Default currency list handed to every new organisation.
+-- Mirrors DEFAULT_CURRENCIES in src/hooks/useCurrencies.ts.
+create or replace function public.seed_default_currencies(p_org_id uuid)
+returns void language sql security definer set search_path = public as $$
+  insert into public.currencies (org_id, code, name, symbol, flag, is_active, sort_order)
+  select p_org_id, d.code, d.name, d.symbol, d.flag, true, d.sort_order
+  from (values
+    ('NGN', 'Nigerian Naira', '₦', '🇳🇬', 0),
+    ('USD', 'US Dollar',      '$', '🇺🇸', 1),
+    ('GBP', 'British Pound',  '£', '🇬🇧', 2),
+    ('EUR', 'Euro',           '€', '🇪🇺', 3),
+    ('CNY', 'Chinese Yuan',   '¥', '🇨🇳', 4)
+  ) as d(code, name, symbol, flag, sort_order)
+  on conflict (org_id, code) do nothing;
+$$;
+
+create or replace function public.seed_currencies_on_org_insert()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  perform public.seed_default_currencies(new.id);
+  return new;
+end $$;
+
+drop trigger if exists trg_seed_currencies_on_org_insert on public.organizations;
+create trigger trg_seed_currencies_on_org_insert
+  after insert on public.organizations
+  for each row execute function public.seed_currencies_on_org_insert();
 
 -- ── User Preferences ──────────────────────────────────────────────────────────
 create table public.user_preferences (
@@ -980,20 +1192,12 @@ create table public.org_deletion_backups (
 
 -- ================================================================
 -- 7. SEED DATA
--- Bootstrap org must exist BEFORE any INSERT that relies on
--- get_current_org_id() returning a non-null value.
+-- No bootstrap organisation is seeded here. Every org is created by a user
+-- via the create_organization() RPC (Onboarding.tsx / LoginPage.tsx signup),
+-- which seeds that org's own default outflow type, category, and rule group
+-- through complete_org_onboarding(). A fresh install therefore starts with
+-- zero organisations.
 -- ================================================================
-
-insert into public.organizations (name, slug, metadata, onboarding_complete)
-values ('My Church', 'primary', '{"bootstrap": true}'::jsonb, true)
-on conflict (slug) do nothing;
-
--- Default outflow type per org (keyed on org_id + name).
-insert into public.outflow_types (org_id, name, color, is_system, is_locked)
-select id, 'General', '#64748b', true, true
-from   public.organizations
-where  slug = 'primary'
-on conflict (org_id, name) do update set is_system = true, is_locked = true;
 
 -- ================================================================
 -- 8. ENABLE ROW LEVEL SECURITY
@@ -1034,6 +1238,7 @@ alter table public.audit_maintenance_log          enable row level security;
 alter table public.gdpr_erasure_requests          enable row level security;
 alter table public.category_opening_balances      enable row level security;
 alter table public.report_templates               enable row level security;
+alter table public.import_batches                 enable row level security;
 alter table public.transaction_allocation_snapshots enable row level security;
 alter table public.recalculation_logs             enable row level security;
 alter table public.dynamic_reports                enable row level security;
@@ -1043,16 +1248,67 @@ alter table public.currencies                     enable row level security;
 alter table public.user_preferences               enable row level security;
 alter table public.org_deletion_backups           enable row level security;
 
+-- ── Plan predicates used by the policies in Section 9 ─────────────────────────
+-- Declared here rather than with the other helpers in Section 4 because they
+-- count rows in business tables that don't exist until Section 6.
+--
+-- These mirror QUANTITY_LIMITS and TXN_TYPE_FEATURE in src/hooks/usePlan.ts.
+-- The database is the enforcer; the TypeScript copies exist so a user sees an
+-- upsell card instead of a raw error. Change one, change the other.
+
+-- Mirrors QUANTITY_LIMITS.multiBank — Start caps at one bank.
+create or replace function public.org_can_add_bank(p_org_id uuid)
+returns boolean language sql stable security definer as $$
+  select public.org_plan_at_least(p_org_id, 'level1')
+      or (select count(*) from public.banks where org_id = p_org_id) < 1;
+$$;
+
+-- Mirrors QUANTITY_LIMITS.customDistributionRules — Start none, Growth two,
+-- Impact unlimited. A custom distribution rule is one special_config_groups row.
+create or replace function public.org_can_add_custom_rule(p_org_id uuid)
+returns boolean language sql stable security definer as $$
+  select case public.org_effective_plan_tier(p_org_id)
+    when 'full'   then true
+    when 'level1' then (select count(*) from public.special_config_groups where org_id = p_org_id) < 2
+    else               false
+  end;
+$$;
+
+-- Which tier a given inflow/outflow transaction_type requires — the four types
+-- the Adjustments and Bank Movement pages exist to manage, both Impact-tier
+-- features. Enforced by trg_inflow/outflow_txn_type_plan in Section 12.
+create or replace function public.org_plan_allows_txn_type(p_org_id uuid, p_txn_type text)
+returns boolean language sql stable as $$
+  select case p_txn_type
+    when 'refund'             then public.org_plan_at_least(p_org_id, 'full')
+    when 'reversal'           then public.org_plan_at_least(p_org_id, 'full')
+    when 'bank_deposit'       then public.org_plan_at_least(p_org_id, 'full')
+    when 'intrabank_transfer' then public.org_plan_at_least(p_org_id, 'full')
+    else true
+  end;
+$$;
+
 -- ================================================================
 -- 9. RLS POLICIES
 -- All helper functions exist (Section 4).
 -- All org_id columns exist (Section 6).
+--
+-- Subscription tiers are enforced HERE and in Section 12, not in the
+-- browser. The React gates in src/components/auth/PlanGates.tsx are
+-- presentation only — they exist so a user sees an upsell card instead
+-- of a database error. Deleting one from the DOM gets you nothing.
+--
+-- DESIGN RULE — plan enforcement is on CREATE, never on READ/EDIT/DELETE.
+-- A downgrade must never trap an org's data: they keep full read, edit
+-- and delete access to everything created on a higher tier, and simply
+-- cannot create more of it. Every plan check below is INSERT-only.
 -- ================================================================
 
 -- ── profiles (no org_id — global user registry) ───────────────────────────────
 
 -- Restricted to own row or a user who shares an active org (no cross-org PII).
--- Username login resolves via resolve_username() SECURITY DEFINER RPC, not this.
+-- Username login resolves inside the `username-auth` Edge Function (service
+-- role), not through this policy and not through any anon-callable RPC.
 create policy "profiles_select" on public.profiles
   for select using (
     id = auth.uid()
@@ -1136,6 +1392,75 @@ create policy "orgs_update" on public.organizations
 create policy "orgs_delete" on public.organizations
   for delete using (public.is_org_admin(id));
 
+-- Billing/metering columns are row-writable by any org admin under orgs_update,
+-- so they are locked at the column level and by a guard trigger. Only the
+-- service role (Stripe webhook) and SECURITY DEFINER functions may change them.
+revoke update on public.organizations from authenticated, anon;
+
+do $$
+declare
+  v_col text;
+  v_locked text[] := array[
+    'plan_tier',
+    'plan_status',
+    'plan_started_at',
+    'plan_expires_at',
+    'trial_ends_at',
+    'stripe_customer_id',
+    'stripe_subscription_id',
+    'imported_rows_count',
+    'imported_rows_period_start',
+    'ocr_daily_page_limit'
+  ];
+begin
+  for v_col in
+    select column_name
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name   = 'organizations'
+      and not (column_name = any (v_locked))
+  loop
+    execute format(
+      'grant update (%I) on public.organizations to authenticated',
+      v_col
+    );
+  end loop;
+end $$;
+
+create or replace function public.guard_organization_billing_columns()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if current_user in ('service_role', 'postgres', 'supabase_admin') then
+    return new;
+  end if;
+
+  if new.plan_tier                  is distinct from old.plan_tier
+  or new.plan_status                is distinct from old.plan_status
+  or new.plan_started_at            is distinct from old.plan_started_at
+  or new.plan_expires_at            is distinct from old.plan_expires_at
+  or new.trial_ends_at              is distinct from old.trial_ends_at
+  or new.stripe_customer_id         is distinct from old.stripe_customer_id
+  or new.stripe_subscription_id     is distinct from old.stripe_subscription_id
+  or new.imported_rows_count        is distinct from old.imported_rows_count
+  or new.imported_rows_period_start is distinct from old.imported_rows_period_start
+  or new.ocr_daily_page_limit       is distinct from old.ocr_daily_page_limit
+  then
+    raise exception
+      'Billing and usage fields on organizations can only be changed by the billing system'
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+revoke all on function public.guard_organization_billing_columns() from public, anon, authenticated;
+
+drop trigger if exists guard_organization_billing_columns on public.organizations;
+create trigger guard_organization_billing_columns
+  before update on public.organizations
+  for each row execute function public.guard_organization_billing_columns();
+
 -- ── org_members ────────────────────────────────────────────────────────────────
 
 create policy "org_members_select" on public.org_members
@@ -1155,7 +1480,10 @@ create policy "org_members_delete" on public.org_members
 create policy "scg_select" on public.special_config_groups
   for select using (public.is_org_member(org_id));
 create policy "scg_insert" on public.special_config_groups
-  for insert with check (public.is_org_admin(org_id));
+  for insert with check (
+    public.is_org_admin(org_id)
+    and public.org_can_add_custom_rule(org_id)
+  );
 create policy "scg_update" on public.special_config_groups
   for update using (public.is_org_admin(org_id));
 create policy "scg_delete" on public.special_config_groups
@@ -1349,7 +1677,10 @@ create policy "intraflow_delete" on public.intra_flows
 create policy "fx_select" on public.fx_transactions
   for select using (public.is_org_member(org_id));
 create policy "fx_insert" on public.fx_transactions
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "fx_update" on public.fx_transactions
   for update using (public.is_org_finance_user(org_id));
 create policy "fx_delete" on public.fx_transactions
@@ -1360,7 +1691,10 @@ create policy "fx_delete" on public.fx_transactions
 create policy "fxc_select" on public.fx_conversions
   for select using (public.is_org_member(org_id));
 create policy "fxc_insert" on public.fx_conversions
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "fxc_update" on public.fx_conversions
   for update using (public.is_org_finance_user(org_id));
 create policy "fxc_delete" on public.fx_conversions
@@ -1371,7 +1705,10 @@ create policy "fxc_delete" on public.fx_conversions
 create policy "bank_deposits_select" on public.bank_deposits
   for select using (public.is_org_member(org_id));
 create policy "bank_deposits_insert" on public.bank_deposits
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "bank_deposits_update" on public.bank_deposits
   for update using (public.is_org_finance_user(org_id));
 create policy "bank_deposits_delete" on public.bank_deposits
@@ -1382,7 +1719,10 @@ create policy "bank_deposits_delete" on public.bank_deposits
 create policy "intrabank_select" on public.intrabank_transfers
   for select using (public.is_org_member(org_id));
 create policy "intrabank_insert" on public.intrabank_transfers
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "intrabank_update" on public.intrabank_transfers
   for update using (public.is_org_finance_user(org_id));
 create policy "intrabank_delete" on public.intrabank_transfers
@@ -1393,7 +1733,10 @@ create policy "intrabank_delete" on public.intrabank_transfers
 create policy "receipts_select" on public.receipts
   for select using (public.is_org_member(org_id));
 create policy "receipts_insert" on public.receipts
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "receipts_delete" on public.receipts
   for delete using (public.is_org_finance_user(org_id));
 
@@ -1403,7 +1746,10 @@ create policy "receipts_delete" on public.receipts
 create policy "invitations_select" on public.invitations
   for select using (public.is_org_admin(org_id));
 create policy "invitations_insert" on public.invitations
-  for insert with check (public.is_org_admin(org_id));
+  for insert with check (
+    public.is_org_admin(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "invitations_update" on public.invitations
   for update using (public.is_org_admin(org_id));
 create policy "invitations_delete" on public.invitations
@@ -1431,10 +1777,11 @@ create policy "audit_select" on public.audit_log
     and public.is_org_admin(org_id)
   );
 
-create policy "audit_insert" on public.audit_log
-  for insert with check (
-    org_id is not null and public.is_org_member(org_id)
-  );
+-- No client INSERT policy on audit_log by design. Audit rows are written by the
+-- SECURITY DEFINER trigger audit_trigger_fn() running as postgres, so the app
+-- role never needs — and must not have — direct INSERT. Granting it back would
+-- let a client forge or suppress its own audit entries, defeating the
+-- append-only trail. (Dropped live by 20260605000001_server_side_audit_triggers.)
 
 -- No client DELETE policy: audit_log is append-only from the client.
 -- Retention cleanup runs via purge_old_audit_logs() (SECURITY DEFINER).
@@ -1448,10 +1795,8 @@ create policy "field_changes_select" on public.field_changes
     and public.is_org_admin(org_id)
   );
 
-create policy "field_changes_insert" on public.field_changes
-  for insert with check (
-    org_id is not null and public.is_org_member(org_id)
-  );
+-- No client INSERT policy on field_changes, for the same reason as audit_log:
+-- the server-side audit trigger writes these rows.
 
 -- No client DELETE policy: field_changes is append-only from the client.
 -- Retention cleanup runs via SECURITY DEFINER maintenance only.
@@ -1485,11 +1830,23 @@ create policy "cob_delete" on public.category_opening_balances
 create policy "report_templates_select" on public.report_templates
   for select using (public.is_org_member(org_id));
 create policy "report_templates_insert" on public.report_templates
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "report_templates_update" on public.report_templates
   for update using (public.is_org_finance_user(org_id));
 create policy "report_templates_delete" on public.report_templates
   for delete using (public.is_org_admin(org_id));
+
+-- ── import_batches ─────────────────────────────────────────────────────────────
+
+create policy "import_batches_select" on public.import_batches
+  for select using (public.is_org_member(org_id));
+create policy "import_batches_insert" on public.import_batches
+  for insert with check (public.is_org_finance_user(org_id));
+create policy "import_batches_update" on public.import_batches
+  for update using (public.is_org_finance_user(org_id));
 
 -- ── transaction_allocation_snapshots ──────────────────────────────────────────
 
@@ -1514,7 +1871,10 @@ create policy "rl_insert" on public.recalculation_logs
 create policy "dr_select" on public.dynamic_reports
   for select using (public.is_org_member(org_id));
 create policy "dr_insert" on public.dynamic_reports
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'full')
+  );
 create policy "dr_update" on public.dynamic_reports
   for update using (public.is_org_finance_user(org_id));
 create policy "dr_delete" on public.dynamic_reports
@@ -1531,13 +1891,20 @@ create policy "drb_select" on public.dynamic_report_blocks
       where  dr.id = report_id
     )
   );
+-- KNOWN LIVE DEFECT — reproduced here deliberately, do not "fix" in place.
+-- drb_insert and drb_update omit 'owner', while drb_delete (repaired by
+-- 20260616000001) includes it. The dynamic-report save flow is delete-then-
+-- insert, so an organisation OWNER saving a report deletes the existing blocks
+-- and is then denied the re-insert — the report is emptied. Correcting this
+-- needs a forward migration so the live database changes too; editing only this
+-- file would hide the defect behind a green drift check.
 create policy "drb_insert" on public.dynamic_report_blocks
   for insert with check (
     exists (
       select 1 from public.dynamic_reports dr
       join   public.org_members m
         on   m.org_id = dr.org_id and m.user_id = auth.uid()
-        and  m.role   in ('owner', 'admin', 'accountant') and m.status = 'active'
+        and  m.role   in ('admin', 'accountant') and m.status = 'active'
       where  dr.id = report_id
     )
   );
@@ -1547,7 +1914,7 @@ create policy "drb_update" on public.dynamic_report_blocks
       select 1 from public.dynamic_reports dr
       join   public.org_members m
         on   m.org_id = dr.org_id and m.user_id = auth.uid()
-        and  m.role   in ('owner', 'admin', 'accountant') and m.status = 'active'
+        and  m.role   in ('admin', 'accountant') and m.status = 'active'
       where  dr.id = report_id
     )
   );
@@ -1627,14 +1994,17 @@ grant execute on function public.save_dynamic_report_blocks(uuid, jsonb) to auth
 
 -- ── currencies ─────────────────────────────────────────────────────────────────
 
+-- Org-scoped throughout: is_admin() is "admin in ANY active org", so using it
+-- here would let an admin of one organisation rewrite every other tenant's
+-- currency list.
 create policy "currencies_select" on public.currencies
-  for select using (auth.role() = 'authenticated');
+  for select using (public.is_org_member(org_id));
 create policy "currencies_insert" on public.currencies
-  for insert with check (public.is_admin());
+  for insert with check (public.is_org_admin(org_id));
 create policy "currencies_update" on public.currencies
-  for update using (public.is_admin());
+  for update using (public.is_org_admin(org_id)) with check (public.is_org_admin(org_id));
 create policy "currencies_delete" on public.currencies
-  for delete using (public.is_admin());
+  for delete using (public.is_org_admin(org_id));
 
 -- ── user_preferences ───────────────────────────────────────────────────────────
 
@@ -1735,12 +2105,16 @@ create unique index if not exists fx_transactions_org_bank_txn_unique
   where public.normalize_txn_ref(transaction_ref) is not null;
 create index if not exists idx_inflow_deposit_group   on public.inflow_transactions(deposit_group_id) where deposit_group_id is not null;
 create index if not exists idx_outflow_deposit_group  on public.outflow_transactions(deposit_group_id) where deposit_group_id is not null;
+create index if not exists inflow_transactions_import_batch_id_idx  on public.inflow_transactions(import_batch_id) where import_batch_id is not null;
+create index if not exists outflow_transactions_import_batch_id_idx on public.outflow_transactions(import_batch_id) where import_batch_id is not null;
 create index if not exists idx_categories_group       on public.categories(group_id);
 create index if not exists idx_invitations_token      on public.invitations(token);
 create index if not exists idx_outflow_department_id  on public.outflow_transactions(department_id);
 create index if not exists idx_invitation_emails_invitation on public.invitation_emails(invitation_id);
 create index if not exists idx_invitation_emails_sent_at    on public.invitation_emails(sent_at desc);
 create index if not exists idx_cob_category           on public.category_opening_balances(category_id);
+create index if not exists idx_inflow_category_id      on public.inflow_transactions(category_id);
+create index if not exists idx_outflow_category_id     on public.outflow_transactions(category_id);
 create index if not exists idx_report_templates_user  on public.report_templates(created_by);
 create index if not exists idx_alloc_config_group     on public.allocation_configs(config_group_id);
 create index if not exists idx_drb_report_position    on public.dynamic_report_blocks(report_id, position);
@@ -1777,6 +2151,7 @@ create index if not exists idx_ledger_entries_org      on public.ledger_entries(
 create index if not exists idx_special_projects_org    on public.special_projects(org_id);
 create index if not exists idx_project_entries_org     on public.project_entries(org_id);
 create index if not exists idx_receipts_org            on public.receipts(org_id);
+create index if not exists idx_import_batches_org      on public.import_batches(org_id);
 create index if not exists idx_invitations_org         on public.invitations(org_id);
 create index if not exists idx_report_templates_org    on public.report_templates(org_id);
 create index if not exists idx_special_config_groups_org on public.special_config_groups(org_id);
@@ -1819,9 +2194,12 @@ create index if not exists idx_intra_flows_org_batch       on public.intra_flows
   where batch_id is not null;
 create index if not exists idx_tas_org_txn                 on public.transaction_allocation_snapshots(org_id, transaction_id);
 
--- Balance Brought Forward deduplication index
-create unique index if not exists idx_inflow_bf_unique_bank
-  on public.inflow_transactions (bank_name)
+-- Balance Brought Forward deduplication index.
+-- Must be org-scoped: banks are plain text and tenants share bank names
+-- (Nigerian churches largely use the same handful), so an unscoped unique
+-- index would let the first tenant to claim a name lock out all others.
+create unique index if not exists idx_inflow_bf_unique_org_bank
+  on public.inflow_transactions (org_id, bank_name)
   where transaction_type = 'balance_brought_forward';
 
 create index if not exists idx_inflow_bank_name   on public.inflow_transactions(bank_name);
@@ -1831,9 +2209,87 @@ create index if not exists idx_inflow_bank_id     on public.inflow_transactions(
 create index if not exists idx_outflow_bank_id    on public.outflow_transactions(bank_id);
 create index if not exists idx_fx_bank_id         on public.fx_transactions(bank_id);
 
+-- Balance-aggregate RPC support (20260807000003_balance_aggregate_rpcs).
+create index if not exists idx_inflow_org_stage2   on public.inflow_transactions(org_id, stage_code_2);
+create index if not exists idx_outflow_org_stage2  on public.outflow_transactions(org_id, stage_code_2);
+create index if not exists idx_inflow_org_bank_id  on public.inflow_transactions(org_id, bank_id);
+create index if not exists idx_outflow_org_bank_id on public.outflow_transactions(org_id, bank_id);
+
 -- ================================================================
 -- 11. RPCS, SECURITY FUNCTIONS AND GRANTS
 -- ================================================================
+
+-- ── Username login rate limiting ──────────────────────────────────────────────
+-- Username → email resolution deliberately has NO database entry point. An
+-- earlier resolve_username() RPC granted to `anon` let any unauthenticated
+-- caller convert guessed usernames into real email addresses — a harvesting
+-- oracle aimed straight at finance administrators. It was dropped in
+-- 20260807000001_remove_resolve_username_rpc.sql.
+--
+-- Username login now runs inside the `username-auth` Edge Function, which
+-- resolves the username with the service role and hands back a session,
+-- never an email address. These two objects are its rate limiter.
+
+create table if not exists public.auth_attempts (
+  id            bigserial   primary key,
+  ip_hash       text        not null,
+  username_hash text        not null,
+  attempted_at  timestamptz not null default now()
+);
+
+create index if not exists auth_attempts_ip_idx
+  on public.auth_attempts (ip_hash, attempted_at desc);
+create index if not exists auth_attempts_username_idx
+  on public.auth_attempts (username_hash, attempted_at desc);
+create index if not exists auth_attempts_attempted_at_idx
+  on public.auth_attempts (attempted_at);
+
+-- RLS on with no policies: only the service role (BYPASSRLS) can read or write.
+alter table public.auth_attempts enable row level security;
+revoke all on public.auth_attempts from anon, authenticated;
+revoke all on sequence public.auth_attempts_id_seq from anon, authenticated;
+
+-- Records the attempt and reports whether the caller is still under the caps:
+-- 10/minute and 60/hour per IP, 20/hour per username.
+create or replace function public.check_auth_rate_limit(
+  p_ip_hash       text,
+  p_username_hash text
+)
+returns boolean
+language plpgsql security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_ip_minute int;
+  v_ip_hour   int;
+  v_user_hour int;
+begin
+  if random() < 0.01 then
+    delete from public.auth_attempts
+    where  attempted_at < now() - interval '24 hours';
+  end if;
+
+  select count(*) into v_ip_minute
+  from   public.auth_attempts
+  where  ip_hash = p_ip_hash and attempted_at > now() - interval '1 minute';
+
+  select count(*) into v_ip_hour
+  from   public.auth_attempts
+  where  ip_hash = p_ip_hash and attempted_at > now() - interval '1 hour';
+
+  select count(*) into v_user_hour
+  from   public.auth_attempts
+  where  username_hash = p_username_hash and attempted_at > now() - interval '1 hour';
+
+  insert into public.auth_attempts (ip_hash, username_hash)
+  values (p_ip_hash, p_username_hash);
+
+  return v_ip_minute < 10 and v_ip_hour < 60 and v_user_hour < 20;
+end;
+$$;
+
+revoke all on function public.check_auth_rate_limit(text, text) from public, anon, authenticated;
+grant execute on function public.check_auth_rate_limit(text, text) to service_role;
 
 -- ── Invitation helpers ────────────────────────────────────────────────────────
 
@@ -2108,24 +2564,67 @@ begin
 end;
 $$;
 
-create or replace function public.trg_ledger_balance_fn()
+-- FOR EACH STATEMENT (not ROW): a bulk import firing N row events would
+-- otherwise trigger N full-account recomputes. These use transition tables
+-- to recompute each affected account once per statement instead. Postgres
+-- does not allow a single trigger to declare transition tables while firing
+-- on more than one event, so insert/update/delete are separate triggers.
+create or replace function public.trg_ledger_balance_ins_fn()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
 begin
-  if tg_op = 'DELETE' then
-    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
-  elsif tg_op = 'UPDATE' and old.account_id is distinct from new.account_id then
-    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
-    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
-  else
-    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
-  end if;
+  for r in select distinct account_id, org_id from new_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
   return null;
 end;
 $$;
 
-create trigger trg_ledger_balance
-  after insert or update or delete on public.ledger_entries
-  for each row execute function public.trg_ledger_balance_fn();
+create or replace function public.trg_ledger_balance_upd_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+begin
+  for r in
+    select distinct account_id, org_id from new_rows where account_id is not null
+    union
+    select distinct account_id, org_id from old_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
+  return null;
+end;
+$$;
+
+create or replace function public.trg_ledger_balance_del_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+begin
+  for r in select distinct account_id, org_id from old_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
+  return null;
+end;
+$$;
+
+create trigger trg_ledger_balance_ins
+  after insert on public.ledger_entries
+  referencing new table as new_rows
+  for each statement execute function public.trg_ledger_balance_ins_fn();
+
+create trigger trg_ledger_balance_upd
+  after update on public.ledger_entries
+  referencing new table as new_rows old table as old_rows
+  for each statement execute function public.trg_ledger_balance_upd_fn();
+
+create trigger trg_ledger_balance_del
+  after delete on public.ledger_entries
+  referencing old table as old_rows
+  for each statement execute function public.trg_ledger_balance_del_fn();
 
 create or replace function public.trg_account_opening_balance_fn()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -2785,6 +3284,42 @@ begin
   end loop;
 end $$;
 
+-- ── Offset-chaining guard ─────────────────────────────────────────────────────
+-- An offset entry (offset_role = 'offset') must point directly at the root
+-- transaction it corrects, not at another offset — otherwise a chain of
+-- corrections could obscure which entry is actually authoritative.
+create or replace function public.prevent_offset_chaining()
+returns trigger language plpgsql as $$
+begin
+  if new.offset_role = 'offset' and new.root_transaction_id is not null then
+    if new.root_transaction_table = 'inflow_transactions' then
+      if exists (
+        select 1 from public.inflow_transactions
+        where id::text = new.root_transaction_id and offset_role = 'offset'
+      ) then
+        raise exception 'offset_chaining_not_allowed: root transaction is itself an offset';
+      end if;
+    elsif new.root_transaction_table = 'outflow_transactions' then
+      if exists (
+        select 1 from public.outflow_transactions
+        where id::text = new.root_transaction_id and offset_role = 'offset'
+      ) then
+        raise exception 'offset_chaining_not_allowed: root transaction is itself an offset';
+      end if;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_prevent_inflow_offset_chaining
+  before insert or update on public.inflow_transactions
+  for each row execute function public.prevent_offset_chaining();
+
+create trigger trg_prevent_outflow_offset_chaining
+  before insert or update on public.outflow_transactions
+  for each row execute function public.prevent_offset_chaining();
+
 create or replace function public.request_org_deletion(
   p_org_id           uuid,
   p_org_name_confirm text
@@ -3024,9 +3559,14 @@ $$;
 
 -- purge_org is NOT granted to authenticated — service-role only.
 
--- ── Atomic FX Conversion (LB-2/E-C2) ─────────────────────────────────────────
+-- ── Atomic FX Conversion (LB-2/E-C2, H-3, H-4) ───────────────────────────────
 -- SECURITY INVOKER: RLS on all three tables enforced with the caller's identity.
 -- Postgres auto-rolls back all three inserts on any exception.
+-- H-3: naira_amount is computed server-side from fx_amount * exchange_rate;
+--      p_naira_amount is kept in the signature for caller compatibility only.
+-- H-4: rejects the conversion outright if the FX balance is insufficient.
+-- The advisory lock serializes concurrent conversions on the same org+currency
+-- so two simultaneous calls can't both read the same running_balance.
 create or replace function public.perform_fx_conversion(
   p_org_id               uuid,
   p_user_id              uuid,
@@ -3049,6 +3589,7 @@ as $$
 declare
   v_prev_balance  numeric(15,4);
   v_new_balance   numeric(15,4);
+  v_naira_amount  numeric(15,2);
   v_fx_tx_id      uuid;
   v_inflow_id     uuid;
   v_conversion_id uuid;
@@ -3060,6 +3601,8 @@ begin
   if p_fx_amount <= 0 then raise exception 'fx_amount must be positive'; end if;
   if p_exchange_rate <= 0 then raise exception 'exchange_rate must be positive'; end if;
 
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_fx_currency));
+
   select coalesce(running_balance, 0)
   into   v_prev_balance
   from   public.fx_transactions
@@ -3069,7 +3612,14 @@ begin
   limit  1;
 
   v_prev_balance := coalesce(v_prev_balance, 0);
+
+  if v_prev_balance < p_fx_amount then
+    raise exception 'Insufficient FX balance: available % but requested %',
+      v_prev_balance, p_fx_amount;
+  end if;
+
   v_new_balance  := v_prev_balance - p_fx_amount;
+  v_naira_amount := round(p_fx_amount * p_exchange_rate, 2);
 
   insert into public.fx_transactions (
     date, currency, withdrawal, deposit, running_balance,
@@ -3087,7 +3637,7 @@ begin
     fx_currency, fx_amount, fx_rate,
     transaction_type, created_by, org_id
   ) values (
-    p_date, p_naira_amount,
+    p_date, v_naira_amount,
     coalesce(p_notes, 'FX Conversion: ' || p_fx_currency || ' → ' || p_base_currency),
     p_bank_name, p_stage_code_1,
     coalesce(p_stage_code_2, 'Percentage Allocation'),
@@ -3101,7 +3651,7 @@ begin
     fx_withdrawal_id, naira_inflow_id, notes,
     allocation_config_id, is_partial, created_by, org_id
   ) values (
-    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, p_naira_amount,
+    p_date, p_fx_currency, p_fx_amount, p_exchange_rate, v_naira_amount,
     v_fx_tx_id, v_inflow_id, p_notes,
     p_allocation_config_id, (p_fx_amount < v_prev_balance),
     p_user_id, p_org_id
@@ -3121,6 +3671,275 @@ $$;
 grant execute on function public.perform_fx_conversion(
   uuid, uuid, date, text, numeric, numeric, numeric, text, text, text, uuid, text, text
 ) to authenticated;
+
+-- ── create_fx_transaction — server-side manual FX ledger entry ──────────────
+-- Computes running_balance server-side under an advisory lock so two manual
+-- entries for the same org+currency can't race on the same prior balance.
+create or replace function public.create_fx_transaction(
+  p_org_id          uuid,
+  p_user_id         uuid,
+  p_date            date,
+  p_currency        text,
+  p_deposit         numeric,
+  p_withdrawal      numeric,
+  p_narration       text default null,
+  p_transaction_ref text default null,
+  p_bank_name       text default null,
+  p_bank_id         uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_prev_balance numeric := 0;
+  v_new_balance  numeric;
+  v_new_id       uuid;
+begin
+  if p_org_id is null then
+    raise exception 'org_id is required';
+  end if;
+  if coalesce(p_deposit, 0) < 0 or coalesce(p_withdrawal, 0) < 0 then
+    raise exception 'deposit and withdrawal must be non-negative';
+  end if;
+  if coalesce(p_deposit, 0) = 0 and coalesce(p_withdrawal, 0) = 0 then
+    raise exception 'Either deposit or withdrawal must be non-zero';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_currency));
+
+  select coalesce(running_balance, 0)
+  into   v_prev_balance
+  from   public.fx_transactions
+  where  org_id   = p_org_id
+    and  currency = p_currency
+  order  by date desc, created_at desc
+  limit  1;
+
+  v_prev_balance := coalesce(v_prev_balance, 0);
+  v_new_balance  := v_prev_balance + coalesce(p_deposit, 0) - coalesce(p_withdrawal, 0);
+
+  insert into public.fx_transactions (
+    date, currency, deposit, withdrawal, running_balance,
+    narration, transaction_ref, bank_name, bank_id, created_by, org_id
+  ) values (
+    p_date, p_currency,
+    coalesce(p_deposit, 0), coalesce(p_withdrawal, 0),
+    v_new_balance,
+    p_narration, p_transaction_ref, p_bank_name, p_bank_id,
+    p_user_id, p_org_id
+  )
+  returning id into v_new_id;
+
+  return v_new_id;
+end;
+$$;
+
+grant execute on function public.create_fx_transaction(
+  uuid, uuid, date, text, numeric, numeric, text, text, text, uuid
+) to authenticated;
+
+-- ── update_fx_transaction — edit a manual FX ledger entry ────────────────────
+-- Full recompute: after any edit, running_balance is recalculated for every
+-- row of this org+currency in ascending date/created_at order, so a changed
+-- date correctly cascades through every later row.
+create or replace function public.update_fx_transaction(
+  p_org_id          uuid,
+  p_user_id         uuid,
+  p_transaction_id  uuid,
+  p_date            date,
+  p_currency        text,
+  p_deposit         numeric,
+  p_withdrawal      numeric,
+  p_narration       text default null,
+  p_transaction_ref text default null,
+  p_bank_name       text default null,
+  p_bank_id         uuid default null
+)
+returns numeric
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_new_balance numeric;
+begin
+  if p_org_id is null then
+    raise exception 'org_id is required';
+  end if;
+  if coalesce(p_deposit, 0) < 0 or coalesce(p_withdrawal, 0) < 0 then
+    raise exception 'deposit and withdrawal must be non-negative';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(p_currency));
+
+  update public.fx_transactions
+  set
+    date            = p_date,
+    deposit         = coalesce(p_deposit, 0),
+    withdrawal      = coalesce(p_withdrawal, 0),
+    narration       = p_narration,
+    transaction_ref = p_transaction_ref,
+    bank_name       = p_bank_name,
+    bank_id         = p_bank_id
+  where id       = p_transaction_id
+    and org_id   = p_org_id
+    and currency = p_currency;
+
+  if not found then
+    raise exception 'FX transaction % not found or does not belong to this org', p_transaction_id;
+  end if;
+
+  with computed as (
+    select id,
+           sum(deposit - withdrawal) over (
+             partition by org_id, currency
+             order by date asc, created_at asc
+             rows between unbounded preceding and current row
+           ) as new_balance
+    from   public.fx_transactions
+    where  org_id   = p_org_id
+      and  currency = p_currency
+  )
+  update public.fx_transactions t
+  set    running_balance = c.new_balance
+  from   computed c
+  where  t.id = c.id;
+
+  select running_balance into v_new_balance
+  from   public.fx_transactions
+  where  id = p_transaction_id;
+
+  return v_new_balance;
+end;
+$$;
+
+grant execute on function public.update_fx_transaction(
+  uuid, uuid, uuid, date, text, numeric, numeric, text, text, text, uuid
+) to authenticated;
+
+-- ── update_fx_conversion — edit a conversion and cascade to its linked rows ──
+create or replace function public.update_fx_conversion(
+  p_conversion_id        uuid,
+  p_org_id               uuid,
+  p_user_id              uuid,
+  p_exchange_rate        numeric,
+  p_naira_amount         numeric,
+  p_notes                text,
+  p_allocation_config_id uuid,
+  p_stage_code_1         text,
+  p_stage_code_2         text,
+  p_bank_name            text
+)
+returns jsonb
+language plpgsql
+as $$
+declare v_conv record;
+begin
+  if not exists (
+    select 1 from public.org_members
+    where org_id = p_org_id and user_id = auth.uid()
+      and role in ('owner', 'admin') and status = 'active'
+  ) then
+    raise exception 'Only admins and owners can edit FX conversions';
+  end if;
+
+  select * into v_conv from public.fx_conversions where id = p_conversion_id and org_id = p_org_id;
+  if not found then raise exception 'FX conversion not found'; end if;
+
+  update public.fx_conversions set
+    exchange_rate = p_exchange_rate, naira_amount = p_naira_amount,
+    notes = p_notes, allocation_config_id = p_allocation_config_id
+  where id = p_conversion_id;
+
+  if v_conv.naira_inflow_id is not null then
+    update public.inflow_transactions set
+      amount = p_naira_amount, fx_rate = p_exchange_rate,
+      description = coalesce(p_notes, description),
+      allocation_config_id = p_allocation_config_id,
+      stage_code_1 = p_stage_code_1, stage_code_2 = p_stage_code_2,
+      bank_name = p_bank_name
+    where id = v_conv.naira_inflow_id;
+  end if;
+
+  if v_conv.fx_withdrawal_id is not null and p_notes is not null then
+    update public.fx_transactions set narration = p_notes where id = v_conv.fx_withdrawal_id;
+  end if;
+
+  return jsonb_build_object(
+    'conversion_id', p_conversion_id,
+    'inflow_id',     v_conv.naira_inflow_id,
+    'fx_tx_id',      v_conv.fx_withdrawal_id
+  );
+end;
+$$;
+
+grant execute on function public.update_fx_conversion(
+  uuid, uuid, uuid, numeric, numeric, text, uuid, text, text, text
+) to authenticated;
+
+-- ── revert_fx_conversion — undo a conversion and restore prior balances ──────
+create or replace function public.revert_fx_conversion(
+  p_conversion_id uuid,
+  p_org_id        uuid,
+  p_user_id       uuid
+)
+returns jsonb
+language plpgsql
+as $$
+declare
+  v_conv    record;
+  v_fx_date date;
+  v_fx_ts   timestamptz;
+  v_fx_amt  numeric;
+  v_ccy     text;
+begin
+  if not exists (
+    select 1 from public.org_members
+    where org_id = p_org_id and user_id = auth.uid()
+      and role in ('owner', 'admin') and status = 'active'
+  ) then
+    raise exception 'Only admins and owners can revert FX conversions';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext(p_org_id::text), hashtext(
+    (select fx_currency from public.fx_conversions where id = p_conversion_id and org_id = p_org_id)
+  ));
+
+  select * into v_conv from public.fx_conversions where id = p_conversion_id and org_id = p_org_id;
+  if not found then raise exception 'FX conversion not found'; end if;
+
+  v_ccy    := v_conv.fx_currency;
+  v_fx_amt := v_conv.fx_amount;
+
+  if v_conv.fx_withdrawal_id is not null then
+    select date, created_at into v_fx_date, v_fx_ts
+    from public.fx_transactions where id = v_conv.fx_withdrawal_id;
+
+    delete from public.fx_transactions where id = v_conv.fx_withdrawal_id;
+
+    update public.fx_transactions
+    set running_balance = running_balance + v_fx_amt
+    where org_id = p_org_id and currency = v_ccy
+      and (date > v_fx_date or (date = v_fx_date and created_at > v_fx_ts));
+  end if;
+
+  if v_conv.naira_inflow_id is not null then
+    delete from public.inflow_transactions where id = v_conv.naira_inflow_id;
+  end if;
+
+  delete from public.fx_conversions where id = p_conversion_id;
+
+  return jsonb_build_object(
+    'reverted_conversion_id', p_conversion_id,
+    'fx_tx_deleted',          v_conv.fx_withdrawal_id,
+    'inflow_deleted',         v_conv.naira_inflow_id
+  );
+end;
+$$;
+
+grant execute on function public.revert_fx_conversion(uuid, uuid, uuid) to authenticated;
 
 -- ── user_preferences updated_at trigger ──────────────────────────────────────
 
@@ -3269,7 +4088,10 @@ alter table public.bank_statement_balances enable row level security;
 create policy "bsb_select" on public.bank_statement_balances
   for select using (public.is_org_member(org_id));
 create policy "bsb_insert" on public.bank_statement_balances
-  for insert with check (public.is_org_finance_user(org_id));
+  for insert with check (
+    public.is_org_finance_user(org_id)
+    and public.org_plan_at_least(org_id, 'level1')
+  );
 create policy "bsb_update" on public.bank_statement_balances
   for update using (public.is_org_finance_user(org_id));
 create policy "bsb_delete" on public.bank_statement_balances
@@ -3350,7 +4172,813 @@ grant execute on function public.normalize_txn_ref(text)    to authenticated;
 grant execute on function public.txn_bank_key(uuid, text)   to authenticated;
 
 -- ================================================================
--- 12. SCHEMA RELOAD
+-- 12. PLAN ENFORCEMENT — triggers
+-- ================================================================
+-- The per-table INSERT policies carrying the plan predicates live inline
+-- with their tables in Section 9. This section holds the three checks
+-- that RLS can't express, all of which need triggers.
+--
+-- DESIGN RULE, restated because these two triggers are where it bites:
+-- enforcement is on CREATE, never on EDIT. A downgraded org keeps full
+-- read, edit and delete access to everything it created on a higher
+-- tier. Both triggers below therefore fire only when a gated value is
+-- actually being introduced, not when an existing row is touched.
+
+-- ── Plan / billing column lock ────────────────────────────────────────────────
+-- orgs_update is `using (is_org_admin(id))` with no WITH CHECK, which in
+-- Postgres means the USING expression doubles as the check — an admin can
+-- write any column on their own org row. Column privileges can't express
+-- "everything except these nine", so the guard is a trigger. Only the
+-- service role (Stripe webhook, checkout/portal edge functions) and
+-- sessions with no PostgREST JWT (migrations, psql) may pass.
+
+create or replace function public.plan_guard_is_privileged()
+returns boolean language plpgsql stable as $$
+declare
+  v_role text;
+begin
+  if coalesce(current_setting('app.plan_guard_bypass', true), '') = 'on' then
+    return true;
+  end if;
+
+  begin
+    v_role := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '');
+  exception when others then
+    v_role := '';
+  end;
+
+  -- '' = no PostgREST request context (a migration or direct psql session).
+  return v_role in ('', 'service_role');
+end;
+$$;
+
+create or replace function public.guard_org_plan_columns()
+returns trigger language plpgsql as $$
+declare
+  -- Compared via to_jsonb rather than `new.plan_status is distinct from
+  -- old.plan_status` and friends, so that a database which hasn't applied
+  -- every billing migration yet still works: a direct field reference to a
+  -- column that doesn't exist raises "record new has no field ..." and would
+  -- take down EVERY organizations UPDATE, not just a plan change.
+  v_guarded constant text[] := array[
+    'plan_tier', 'plan_started_at', 'plan_expires_at', 'plan_status',
+    'trial_ends_at', 'stripe_customer_id', 'stripe_subscription_id',
+    'imported_rows_count', 'imported_rows_period_start'
+  ];
+  v_old jsonb;
+  v_new jsonb;
+  v_col text;
+begin
+  if public.plan_guard_is_privileged() then
+    return new;
+  end if;
+
+  v_old := to_jsonb(old);
+  v_new := to_jsonb(new);
+
+  foreach v_col in array v_guarded loop
+    if v_new ? v_col and (v_old -> v_col) is distinct from (v_new -> v_col) then
+      raise exception
+        'Plan and billing fields are managed by billing and cannot be changed directly (%)', v_col
+        using errcode = '42501';
+    end if;
+  end loop;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_guard_org_plan_columns on public.organizations;
+create trigger trg_guard_org_plan_columns
+  before update on public.organizations
+  for each row execute function public.guard_org_plan_columns();
+
+-- ── transaction_type gate ─────────────────────────────────────────────────────
+-- A trigger rather than an RLS WITH CHECK, specifically so a downgrade
+-- doesn't trap data: WITH CHECK on UPDATE cannot see OLD, so it would
+-- re-evaluate the row's existing transaction_type and block a Start-tier org
+-- from editing a refund it created while on Impact.
+create or replace function public.enforce_txn_type_plan()
+returns trigger language plpgsql as $$
+begin
+  -- Nested rather than ANDed with tg_op: PL/pgSQL does not guarantee
+  -- short-circuit evaluation, and OLD is unassigned during INSERT, so a
+  -- single `tg_op = 'UPDATE' and old.x ...` can raise "record old is not
+  -- assigned yet" on every insert.
+  if tg_op = 'UPDATE' then
+    if new.transaction_type is not distinct from old.transaction_type then
+      return new;
+    end if;
+  end if;
+
+  if not public.org_plan_allows_txn_type(new.org_id, new.transaction_type) then
+    raise exception '% transactions require the Clariva Impact plan', new.transaction_type
+      using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_inflow_txn_type_plan on public.inflow_transactions;
+create trigger trg_inflow_txn_type_plan
+  before insert or update on public.inflow_transactions
+  for each row execute function public.enforce_txn_type_plan();
+
+drop trigger if exists trg_outflow_txn_type_plan on public.outflow_transactions;
+create trigger trg_outflow_txn_type_plan
+  before insert or update on public.outflow_transactions
+  for each row execute function public.enforce_txn_type_plan();
+
+-- ── Bank quantity + foreign-currency caps ─────────────────────────────────────
+-- Also a trigger: both caps need a count of sibling rows, and the currency
+-- cap must distinguish "switching an existing FX bank's currency" from
+-- "adding a second currency".
+create or replace function public.enforce_bank_plan_limits()
+returns trigger language plpgsql as $$
+declare
+  v_tier          text := public.org_effective_plan_tier(new.org_id);
+  v_other_fx      int;
+  v_currency_seen bool;
+begin
+  if tg_op = 'INSERT' and not public.org_can_add_bank(new.org_id) then
+    raise exception 'The Clariva Start plan is limited to one bank account'
+      using errcode = '42501';
+  end if;
+
+  -- Nothing further to check unless this row is (or is becoming) foreign
+  -- currency. Editing an existing FX bank's other fields is always allowed.
+  if not coalesce(new.is_foreign_currency, false) then
+    return new;
+  end if;
+
+  -- Nested rather than ANDed with tg_op — see enforce_txn_type_plan().
+  if tg_op = 'UPDATE' then
+    if coalesce(old.is_foreign_currency, false)
+       and new.currency is not distinct from old.currency then
+      return new;
+    end if;
+  end if;
+
+  if v_tier = 'free' then
+    raise exception 'Foreign-currency accounts require the Clariva Growth plan'
+      using errcode = '42501';
+  end if;
+
+  if v_tier = 'level1' then
+    -- Growth may run any number of FX banks, but all in the same one foreign
+    -- currency. Impact removes the currency-count cap.
+    select count(distinct currency),
+           bool_or(currency = new.currency)
+      into v_other_fx, v_currency_seen
+    from public.banks
+    where org_id = new.org_id
+      and is_foreign_currency
+      and id <> new.id;
+
+    if coalesce(v_other_fx, 0) >= 1 and not coalesce(v_currency_seen, false) then
+      raise exception 'A second foreign currency requires the Clariva Impact plan'
+        using errcode = '42501';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_bank_plan_limits on public.banks;
+create trigger trg_bank_plan_limits
+  before insert or update on public.banks
+  for each row execute function public.enforce_bank_plan_limits();
+
+grant execute on function public.org_plan_allows_txn_type(uuid, text) to authenticated;
+grant execute on function public.org_can_add_bank(uuid)              to authenticated;
+grant execute on function public.org_can_add_custom_rule(uuid)       to authenticated;
+-- ================================================================
+-- 12.9 LIVE-DATABASE RECONCILIATION
+--
+-- Objects that exist in the live database (created by migrations) but were
+-- missing from this file. A fresh install must come up byte-identical to a
+-- migrated database, otherwise disaster recovery, staging and any RLS
+-- integration test are all validating a schema nobody actually runs.
+--
+-- Verified by loading this file into an empty Postgres, replaying every
+-- forward migration on top, and diffing pg_catalog until the two converged.
+-- ================================================================
+
+-- ── Duplicate-name policies carried by the live database ─────────────────────
+-- These were created under one name by an early migration and re-created under
+-- a second name by a later "fresh install fix" migration, so production carries
+-- both. The predicates are identical to their siblings above, so the pair is
+-- redundant rather than permissive — but it is reproduced here so that a fresh
+-- install matches the live database exactly and the drift check can demand
+-- equality rather than "close enough".
+
+drop policy if exists "fx_conversions_select" on public.fx_conversions;
+create policy "fx_conversions_select" on public.fx_conversions
+  for select using (public.is_org_member(org_id));
+
+drop policy if exists "fx_conversions_insert" on public.fx_conversions;
+create policy "fx_conversions_insert" on public.fx_conversions
+  for insert with check (public.is_org_finance_user(org_id));
+
+drop policy if exists "fx_conversions_delete" on public.fx_conversions;
+create policy "fx_conversions_delete" on public.fx_conversions
+  for delete using (public.is_org_finance_user(org_id));
+
+drop policy if exists "org_deletion_backups_select" on public.org_deletion_backups;
+create policy "org_deletion_backups_select" on public.org_deletion_backups
+  for select using (public.is_org_owner(org_id));
+
+drop policy if exists "user_preferences_select" on public.user_preferences;
+create policy "user_preferences_select" on public.user_preferences
+  for select using (user_id = auth.uid());
+
+drop policy if exists "user_preferences_upsert" on public.user_preferences;
+create policy "user_preferences_upsert" on public.user_preferences
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "user_preferences_update" on public.user_preferences;
+create policy "user_preferences_update" on public.user_preferences
+  for update using (user_id = auth.uid());
+
+-- ── updated_at trigger on user_preferences ───────────────────────────────────
+drop trigger if exists trg_user_preferences_updated_at on public.user_preferences;
+create trigger trg_user_preferences_updated_at
+  before update on public.user_preferences
+  for each row execute function public.set_user_preferences_updated_at();
+
+-- ── Indexes / constraints present live but absent here ───────────────────────
+create index if not exists idx_org_deletion_backups_org
+  on public.org_deletion_backups(org_id);
+
+-- Required by the user_preferences upsert (on_conflict=user_id,org_id).
+create unique index if not exists user_preferences_user_org_uniq
+  on public.user_preferences(user_id, org_id);
+
+-- Second, redundant unique on (org_id, name); the inline `unique (org_id, name)`
+-- above already supplies outflow_types_org_id_name_key. Live carries both.
+do $$ begin
+  if not exists (select 1 from pg_constraint where conname = 'outflow_types_org_name_unique') then
+    alter table public.outflow_types
+      add constraint outflow_types_org_name_unique unique (org_id, name);
+  end if;
+end $$;
+
+-- ================================================================
+-- 12.95 ATOMIC RESTORE SUBSYSTEM
+--
+-- Folded in verbatim from 20260806000002_atomic_restore_rpc.sql, which
+-- had not been reflected here. Self-contained and idempotent.
+-- ================================================================
+
+-- ============================================================================
+-- Atomic restore: delete + insert in ONE transaction
+--
+-- Finding addressed (app audit):
+--   restoreFromBackup() issued ~26 DELETEs and N upserts as separate,
+--   un-transacted PostgREST round-trips from a browser tab. A network drop, a
+--   closed tab, or one FK violation between the delete loop and the insert loop
+--   left the org permanently empty or half-populated, with no rollback path.
+--   A half-restored ledger is worse than no ledger: it looks valid.
+--
+-- Design: rows are staged over many ordinary (RLS-protected) inserts, then a
+-- single SECURITY DEFINER RPC replays them. Chunking the *upload* is safe;
+-- chunking the *commit* is not, so commit_restore() does every delete and every
+-- insert inside its own implicit transaction — any exception rolls back the lot.
+--
+-- Idempotent — safe to re-run.
+-- ============================================================================
+
+-- ── 1. Allowlist ─────────────────────────────────────────────────────────────
+-- commit_restore() builds dynamic SQL. Every identifier it interpolates comes
+-- from this table and nowhere else — a caller cannot name an arbitrary relation.
+-- Mirrors MANAGED_TABLES in src/utils/backupRestore.ts; insert_order matches the
+-- registry's array order (parents before children), delete order is its reverse.
+
+CREATE TABLE IF NOT EXISTS public.restore_allowed_tables (
+  table_key         text    PRIMARY KEY,
+  insert_order      integer NOT NULL,
+  conflict_column   text    NOT NULL DEFAULT 'id',
+  /* false = table has no org_id column (global or the org row itself) */
+  org_scoped        boolean NOT NULL DEFAULT true,
+  /* replace-mode wipes this table first. Never true for non-org-scoped tables:
+     an unscoped DELETE would cross tenant boundaries. */
+  delete_in_replace boolean NOT NULL DEFAULT false,
+  /* 'update' = upsert; 'nothing' = insert-only (append-mode / audit tables) */
+  conflict_action   text    NOT NULL DEFAULT 'update'
+    CHECK (conflict_action IN ('update', 'nothing'))
+);
+
+ALTER TABLE public.restore_allowed_tables ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "restore_allowed_tables_select" ON public.restore_allowed_tables;
+CREATE POLICY "restore_allowed_tables_select" ON public.restore_allowed_tables
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+-- Reconciled wholesale on every run so the allowlist can never drift from the
+-- registry: a table dropped from MANAGED_TABLES disappears here too.
+--
+-- Upsert + prune rather than TRUNCATE: restore_staging carries an FK to this
+-- table, and Postgres refuses to TRUNCATE a table referenced by a foreign key
+-- even when the referencing table is empty — which would make every re-run
+-- after the first one fail.
+WITH seed (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action) AS (
+  VALUES
+    -- Configuration
+    ('currencies'::text,                  1::integer, 'id'::text,   true,  true,  'update'::text),
+    ('category_groups',                   2, 'id',   true,  true,  'update'),
+    ('categories',                        3, 'id',   true,  true,  'update'),
+    ('category_opening_balances',         4, 'id',   true,  true,  'update'),
+    ('banks',                             5, 'id',   true,  true,  'update'),
+    -- Allocation
+    ('special_config_groups',             6, 'id',   true,  true,  'update'),
+    ('allocation_configs',                7, 'id',   true,  true,  'update'),
+    ('income_types',                      8, 'id',   true,  true,  'update'),
+    ('outflow_types',                     9, 'id',   true,  true,  'update'),
+    ('income_type_rules',                10, 'id',   true,  true,  'update'),
+    -- Transactions
+    ('inflow_transactions',              11, 'id',   true,  true,  'update'),
+    ('outflow_transactions',             12, 'id',   true,  true,  'update'),
+    ('intra_flows',                      13, 'id',   true,  true,  'update'),
+    ('bank_deposits',                    14, 'id',   true,  true,  'update'),
+    ('intrabank_transfers',              15, 'id',   true,  true,  'update'),
+    ('fx_transactions',                  16, 'id',   true,  true,  'update'),
+    ('fx_conversions',                   17, 'id',   true,  true,  'update'),
+    ('transaction_allocation_snapshots', 18, 'id',   true,  false, 'nothing'),
+    ('recalculation_logs',               19, 'id',   true,  false, 'nothing'),
+    -- Projects
+    ('special_projects',                 20, 'id',   true,  true,  'update'),
+    ('project_entries',                  21, 'id',   true,  true,  'update'),
+    -- Reports
+    ('report_templates',                 22, 'id',   true,  true,  'update'),
+    ('dynamic_reports',                  23, 'id',   true,  true,  'update'),
+    ('dynamic_report_blocks',            24, 'id',   true,  true,  'update'),
+    ('dynamic_report_snapshots',         25, 'id',   true,  true,  'update'),
+    -- Membership
+    ('org_members',                      26, 'id',   true,  false, 'update'),
+    -- Reconciliation
+    ('bank_statement_balances',          27, 'id',   true,  true,  'update'),
+    ('reconciliation_runs',              28, 'id',   true,  false, 'nothing'),
+    -- Audit trail: append-only, never deleted, never overwritten on conflict.
+    ('receipts',                         29, 'id',   true,  false, 'nothing'),
+    ('audit_log',                        30, 'id',   true,  false, 'nothing'),
+    ('field_changes',                    31, 'id',   true,  false, 'nothing')
+),
+-- Data-modifying CTEs always execute, referenced or not.
+upserted AS (
+  INSERT INTO public.restore_allowed_tables
+    (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action)
+  SELECT * FROM seed
+  ON CONFLICT (table_key) DO UPDATE SET
+    insert_order      = EXCLUDED.insert_order,
+    conflict_column   = EXCLUDED.conflict_column,
+    org_scoped        = EXCLUDED.org_scoped,
+    delete_in_replace = EXCLUDED.delete_in_replace,
+    conflict_action   = EXCLUDED.conflict_action
+  RETURNING table_key
+)
+-- Prune anything no longer in the registry. Fails loudly rather than silently
+-- if an in-flight batch still references the removed key.
+DELETE FROM public.restore_allowed_tables a
+WHERE a.table_key NOT IN (SELECT s.table_key FROM seed s);
+
+-- ── 2. Staging ───────────────────────────────────────────────────────────────
+-- The client inserts here over as many round-trips as the payload needs. These
+-- are ordinary RLS-protected writes; nothing destructive happens until commit.
+
+CREATE TABLE IF NOT EXISTS public.restore_batches (
+  id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  org_id       uuid        NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  created_by   uuid        NOT NULL DEFAULT auth.uid(),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  status       text        NOT NULL DEFAULT 'staging'
+    CHECK (status IN ('staging', 'committed', 'aborted'))
+);
+
+CREATE TABLE IF NOT EXISTS public.restore_staging (
+  id        bigserial PRIMARY KEY,
+  batch_id  uuid  NOT NULL REFERENCES public.restore_batches(id) ON DELETE CASCADE,
+  -- FK to the allowlist: an unknown table name is rejected at staging time,
+  -- long before anything is deleted.
+  table_key text  NOT NULL REFERENCES public.restore_allowed_tables(table_key),
+  rows      jsonb NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS restore_staging_batch_idx
+  ON public.restore_staging (batch_id, table_key, id);
+
+ALTER TABLE public.restore_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.restore_staging ENABLE ROW LEVEL SECURITY;
+
+-- Only an org OWNER may stage or commit a restore. Matches the destructiveness
+-- of the operation: replace mode discards the org's entire ledger.
+DROP POLICY IF EXISTS "restore_batches_all" ON public.restore_batches;
+CREATE POLICY "restore_batches_all" ON public.restore_batches
+  FOR ALL
+  USING       (public.is_org_owner(org_id))
+  WITH CHECK  (public.is_org_owner(org_id));
+
+DROP POLICY IF EXISTS "restore_staging_all" ON public.restore_staging;
+CREATE POLICY "restore_staging_all" ON public.restore_staging
+  FOR ALL
+  USING (EXISTS (
+    SELECT 1 FROM public.restore_batches b
+    WHERE b.id = restore_staging.batch_id AND public.is_org_owner(b.org_id)
+  ))
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM public.restore_batches b
+    WHERE b.id = restore_staging.batch_id
+      AND b.status = 'staging'
+      AND public.is_org_owner(b.org_id)
+  ));
+
+-- ── 3. Commit ────────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.commit_restore(
+  p_batch_id              uuid,
+  p_mode                  text,
+  p_acknowledge_data_loss boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_org_id      uuid;
+  v_status      text;
+  v_tbl         record;
+  v_rows        jsonb;
+  v_cols        text[];
+  v_collist     text;
+  v_setlist     text;
+  v_sql         text;
+  v_live        bigint;
+  v_staged      bigint;
+  v_inserted    bigint;
+  v_shortfall   text[]  := ARRAY[]::text[];
+  v_total_short bigint  := 0;
+  v_counts      jsonb   := '{}'::jsonb;
+BEGIN
+  IF p_mode NOT IN ('merge', 'replace') THEN
+    RAISE EXCEPTION 'Unknown restore mode: %', p_mode USING ERRCODE = '22023';
+  END IF;
+
+  SELECT org_id, status INTO v_org_id, v_status
+  FROM public.restore_batches WHERE id = p_batch_id
+  FOR UPDATE;
+
+  IF v_org_id IS NULL THEN
+    RAISE EXCEPTION 'Unknown restore batch %', p_batch_id USING ERRCODE = 'P0002';
+  END IF;
+  IF v_status <> 'staging' THEN
+    RAISE EXCEPTION 'Restore batch % is already %', p_batch_id, v_status USING ERRCODE = '55000';
+  END IF;
+
+  -- SECURITY DEFINER bypasses RLS, so authorisation is re-checked explicitly.
+  IF NOT public.is_org_owner(v_org_id) THEN
+    RAISE EXCEPTION 'Only an organisation owner may commit a restore'
+      USING ERRCODE = '42501';
+  END IF;
+
+  -- A full-ledger replay can outrun the default statement timeout. Scoped to
+  -- this transaction only.
+  PERFORM set_config('statement_timeout', '600000', true);
+
+  -- ── Replace-mode guard, server side ────────────────────────────────────────
+  -- The client runs the same comparison before uploading, but the client is not
+  -- a trust boundary: a truncated or wrong-org backup must not be able to empty
+  -- the ledger just because the browser skipped the preflight.
+  IF p_mode = 'replace' AND NOT p_acknowledge_data_loss THEN
+    FOR v_tbl IN
+      SELECT * FROM public.restore_allowed_tables
+      WHERE delete_in_replace ORDER BY insert_order
+    LOOP
+      EXECUTE format('SELECT count(*) FROM public.%I WHERE org_id = $1', v_tbl.table_key)
+        INTO v_live USING v_org_id;
+
+      SELECT coalesce(sum(jsonb_array_length(s.rows)), 0) INTO v_staged
+      FROM public.restore_staging s
+      WHERE s.batch_id = p_batch_id AND s.table_key = v_tbl.table_key;
+
+      IF v_staged < v_live THEN
+        v_shortfall   := v_shortfall || format('%s (%s live vs %s staged)',
+                                               v_tbl.table_key, v_live, v_staged);
+        v_total_short := v_total_short + (v_live - v_staged);
+      END IF;
+    END LOOP;
+
+    IF array_length(v_shortfall, 1) > 0 THEN
+      RAISE EXCEPTION
+        'Replace refused: backup is short by % row(s) — %. Re-confirm explicitly to proceed.',
+        v_total_short, array_to_string(v_shortfall, '; ')
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  -- ── Delete, children before parents ────────────────────────────────────────
+  -- Always org-scoped: RLS is bypassed here, so the WHERE clause is the only
+  -- thing standing between this and another tenant's data.
+  IF p_mode = 'replace' THEN
+    FOR v_tbl IN
+      SELECT * FROM public.restore_allowed_tables
+      WHERE delete_in_replace ORDER BY insert_order DESC
+    LOOP
+      EXECUTE format('DELETE FROM public.%I WHERE org_id = $1', v_tbl.table_key)
+        USING v_org_id;
+    END LOOP;
+  END IF;
+
+  -- ── Insert, parents before children ────────────────────────────────────────
+  FOR v_tbl IN
+    SELECT * FROM public.restore_allowed_tables ORDER BY insert_order
+  LOOP
+    SELECT coalesce(jsonb_agg(elem ORDER BY s.id, ord), '[]'::jsonb) INTO v_rows
+    FROM public.restore_staging s,
+         LATERAL jsonb_array_elements(s.rows) WITH ORDINALITY AS t(elem, ord)
+    WHERE s.batch_id = p_batch_id AND s.table_key = v_tbl.table_key;
+
+    IF jsonb_array_length(v_rows) = 0 THEN CONTINUE; END IF;
+
+    IF v_tbl.org_scoped THEN
+      -- Overwrite org_id on every row rather than trusting the file. A backup
+      -- taken from another org cannot be used to write into this one.
+      SELECT jsonb_agg(elem || jsonb_build_object('org_id', v_org_id))
+        INTO v_rows FROM jsonb_array_elements(v_rows) elem;
+    ELSIF v_tbl.table_key = 'organizations' THEN
+      -- Only the org being restored; never a sibling tenant's row.
+      SELECT coalesce(jsonb_agg(elem), '[]'::jsonb) INTO v_rows
+      FROM jsonb_array_elements(v_rows) elem
+      WHERE elem->>'id' = v_org_id::text;
+
+      IF jsonb_array_length(v_rows) = 0 THEN CONTINUE; END IF;
+    END IF;
+
+    -- Restore only columns the payload actually carries and the table actually
+    -- has: an older backup missing a newer column must not null it out, and a
+    -- newer backup with a dropped column must not abort the restore.
+    SELECT array_agg(DISTINCT k ORDER BY k) INTO v_cols
+    FROM jsonb_array_elements(v_rows) e, jsonb_object_keys(e) k
+    WHERE k IN (
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = v_tbl.table_key
+        AND is_generated = 'NEVER' AND identity_generation IS DISTINCT FROM 'ALWAYS'
+    );
+
+    IF v_cols IS NULL OR array_length(v_cols, 1) = 0 THEN
+      RAISE EXCEPTION 'Backup rows for % carry no column matching the live schema',
+        v_tbl.table_key USING ERRCODE = '42703';
+    END IF;
+    IF NOT (v_tbl.conflict_column = ANY (v_cols)) THEN
+      RAISE EXCEPTION 'Backup rows for % are missing the key column %',
+        v_tbl.table_key, v_tbl.conflict_column USING ERRCODE = '42703';
+    END IF;
+
+    SELECT string_agg(quote_ident(c), ', ' ORDER BY c) INTO v_collist FROM unnest(v_cols) c;
+    SELECT string_agg(format('%I = EXCLUDED.%I', c, c), ', ' ORDER BY c) INTO v_setlist
+    FROM unnest(v_cols) c WHERE c <> v_tbl.conflict_column;
+
+    v_sql := format(
+      'INSERT INTO public.%I (%s) SELECT %s FROM jsonb_populate_recordset(null::public.%I, $1) ON CONFLICT (%I) DO %s',
+      v_tbl.table_key,
+      v_collist,
+      v_collist,
+      v_tbl.table_key,
+      v_tbl.conflict_column,
+      CASE
+        WHEN v_tbl.conflict_action = 'nothing' OR v_setlist IS NULL THEN 'NOTHING'
+        ELSE 'UPDATE SET ' || v_setlist
+      END
+    );
+
+    EXECUTE v_sql USING v_rows;
+    GET DIAGNOSTICS v_inserted = ROW_COUNT;
+    v_counts := v_counts || jsonb_build_object(v_tbl.table_key, v_inserted);
+  END LOOP;
+
+  -- Staged payload is dead weight once replayed; the batch row is kept as a
+  -- record that the restore happened.
+  DELETE FROM public.restore_staging WHERE batch_id = p_batch_id;
+  UPDATE public.restore_batches SET status = 'committed' WHERE id = p_batch_id;
+
+  RETURN jsonb_build_object('org_id', v_org_id, 'mode', p_mode, 'counts', v_counts);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.commit_restore(uuid, text, boolean) FROM public;
+GRANT EXECUTE ON FUNCTION public.commit_restore(uuid, text, boolean) TO authenticated;
+
+-- ── 4. Housekeeping ──────────────────────────────────────────────────────────
+-- Abandoned batches (tab closed mid-upload) hold no locks and touch no live
+-- data, but should not accumulate.
+
+CREATE OR REPLACE FUNCTION public.purge_stale_restore_batches(p_older_than interval DEFAULT '24 hours')
+RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp
+AS $$
+DECLARE v_deleted integer;
+BEGIN
+  DELETE FROM public.restore_batches
+  WHERE status = 'staging' AND created_at < now() - p_older_than;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.purge_stale_restore_batches(interval) FROM public;
+
+NOTIFY pgrst, 'reload schema';
+
+
+-- ================================================================
+-- BALANCE AGGREGATES (20260807000003_balance_aggregate_rpcs)
+-- ================================================================
+-- Server-side sums for the balance screens. Before these, every balance view
+-- streamed the org's whole transaction history to the browser and added it up
+-- in JavaScript. See the migration file for the full rationale.
+--
+-- SECURITY INVOKER (not DEFINER) is deliberate: the caller's RLS policies still
+-- apply to the underlying tables, so p_org_id cannot be used to read another
+-- tenant's ledger.
+--
+-- Fidelity rule: these are a performance change, NOT a numbers change. Every
+-- filter and sign convention mirrors the JavaScript it replaces exactly,
+-- including two behaviours that are arguably wrong but out of scope here:
+--   1. Outflows with a NULL stage_code_2 are excluded from the percentage
+--      bucket (the client used PostgREST `not.eq`, which drops NULLs).
+--   2. Bank balances count every outflow but exclude balance_brought_forward
+--      inflows, and apply no offset_role handling on either side.
+
+drop function if exists public.org_bank_balance_totals(uuid);
+
+create function public.org_bank_balance_totals(p_org_id uuid)
+returns table (
+  bank_id       uuid,
+  bank_name     text,
+  inflow_total  numeric,
+  outflow_total numeric
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  with inf as (
+    select
+      i.bank_id                                         as bank_id,
+      case when i.bank_id is null then i.bank_name end  as bank_name,
+      sum(coalesce(i.amount, 0))                        as total
+    from public.inflow_transactions i
+    where i.org_id = p_org_id
+      and i.transaction_type is distinct from 'balance_brought_forward'
+      and (i.bank_id is not null or nullif(i.bank_name, '') is not null)
+    group by 1, 2
+  ),
+  outf as (
+    select
+      o.bank_id                                         as bank_id,
+      case when o.bank_id is null then o.bank_name end  as bank_name,
+      sum(coalesce(o.amount_disbursed, 0))              as total
+    from public.outflow_transactions o
+    where o.org_id = p_org_id
+      and (o.bank_id is not null or nullif(o.bank_name, '') is not null)
+    group by 1, 2
+  )
+  select
+    coalesce(inf.bank_id,   outf.bank_id)   as bank_id,
+    coalesce(inf.bank_name, outf.bank_name) as bank_name,
+    coalesce(inf.total, 0)                  as inflow_total,
+    coalesce(outf.total, 0)                 as outflow_total
+  from inf
+  full outer join outf
+    on  inf.bank_id   is not distinct from outf.bank_id
+    and inf.bank_name is not distinct from outf.bank_name;
+$$;
+
+-- Grouping is by the RAW (category_id, stage_code_1) pair, not by a resolved
+-- name: rename-resolution stays in src/utils/categoryReferences.ts so there is
+-- one implementation rather than two that can drift.
+
+drop function if exists public.org_category_fund_totals(uuid);
+
+create function public.org_category_fund_totals(p_org_id uuid)
+returns table (
+  category_id    uuid,
+  stage_code_1   text,
+  seed_in        numeric,
+  seed_out       numeric,
+  seed_out_count bigint,
+  sav_in         numeric,
+  sav_out        numeric,
+  pct_out        numeric
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  with inflow_side as (
+    select
+      i.category_id,
+      i.stage_code_1,
+      sum(coalesce(i.amount, 0)) filter (where i.stage_code_2 = 'Specific Seed') as seed_in,
+      sum(coalesce(i.amount, 0)) filter (where i.stage_code_2 = 'Savings')       as sav_in
+    from public.inflow_transactions i
+    where i.org_id = p_org_id
+      and i.stage_code_2 in ('Specific Seed', 'Savings')
+    group by 1, 2
+  ),
+  outflow_side as (
+    select
+      o.category_id,
+      o.stage_code_1,
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (where o.stage_code_2 = 'Specific Seed')  as seed_out,
+      count(*) filter (where o.stage_code_2 = 'Specific Seed') as seed_out_count,
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (where o.stage_code_2 = 'Savings')        as sav_out,
+      -- NULL stage_code_2 excluded on purpose — see the fidelity note above.
+      sum(
+        case when o.offset_role = 'offset' then -coalesce(o.amount_disbursed, 0)
+             else coalesce(o.amount_disbursed, 0) end
+      ) filter (
+        where o.stage_code_2 is not null
+          and o.stage_code_2 <> 'Specific Seed'
+          and o.stage_code_2 <> 'Savings'
+      )                                                  as pct_out
+    from public.outflow_transactions o
+    where o.org_id = p_org_id
+    group by 1, 2
+  )
+  select
+    coalesce(i.category_id,  o.category_id)  as category_id,
+    coalesce(i.stage_code_1, o.stage_code_1) as stage_code_1,
+    coalesce(i.seed_in,        0) as seed_in,
+    coalesce(o.seed_out,       0) as seed_out,
+    coalesce(o.seed_out_count, 0) as seed_out_count,
+    coalesce(i.sav_in,         0) as sav_in,
+    coalesce(o.sav_out,        0) as sav_out,
+    coalesce(o.pct_out,        0) as pct_out
+  from inflow_side i
+  full outer join outflow_side o
+    on  i.category_id  is not distinct from o.category_id
+    and i.stage_code_1 is not distinct from o.stage_code_1;
+$$;
+
+-- Per-target breakdown for the Designated Gifts tab. `latest` is text because
+-- the client compares it as an ISO string, and '' sorts below every real date.
+
+drop function if exists public.org_seed_target_totals(uuid);
+
+create function public.org_seed_target_totals(p_org_id uuid)
+returns table (
+  category_id  uuid,
+  stage_code_1 text,
+  label        text,
+  total        numeric,
+  entry_count  bigint,
+  latest       text
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $$
+  select
+    i.category_id,
+    i.stage_code_1,
+    coalesce(
+      nullif(i.specific_seed_description, ''),
+      nullif(i.description, ''),
+      '(No target specified)'
+    )                                        as label,
+    sum(coalesce(i.amount, 0))               as total,
+    count(*)                                 as entry_count,
+    coalesce(max(i.date)::text, '')          as latest
+  from public.inflow_transactions i
+  where i.org_id = p_org_id
+    and i.stage_code_2 = 'Specific Seed'
+  group by 1, 2, 3;
+$$;
+
+revoke all on function public.org_bank_balance_totals(uuid)   from public;
+revoke all on function public.org_category_fund_totals(uuid)  from public;
+revoke all on function public.org_seed_target_totals(uuid)    from public;
+
+grant execute on function public.org_bank_balance_totals(uuid)  to authenticated;
+grant execute on function public.org_category_fund_totals(uuid) to authenticated;
+grant execute on function public.org_seed_target_totals(uuid)   to authenticated;
+
+notify pgrst, 'reload schema';
+
+
+-- ================================================================
+-- 13. SCHEMA RELOAD
 -- ================================================================
 
 notify pgrst, 'reload schema';

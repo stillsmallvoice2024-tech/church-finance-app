@@ -17,9 +17,11 @@ export function BanksTab({ onAdd, onEdit, onDelete }: {
   const [sort,   setSort]   = useState('name|asc')
 
   const navigate = useNavigate()
-  const { quantityLimit } = usePlan()
+  const { quantityLimit, planLoading } = usePlan()
   const bankLimit = quantityLimit('multiBank')
-  const atCap = bankLimit !== null && banks.length >= bankLimit
+  // An unknown tier resolves to Start, whose cap is 1 — so hold the cap off
+  // until the real tier lands, or a Growth org briefly reads as "at cap".
+  const atCap = !planLoading && bankLimit !== null && banks.length >= bankLimit
 
   // Single guarded entry point, mirrors DistributionRulesTab's
   // guardedNewCustom — the real cap enforcement lives in useAddBank()

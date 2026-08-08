@@ -26,6 +26,22 @@ interface InviteRow {
   inviter_name: string | null
 }
 
+// Untrusted user input (org name, display name) is interpolated into HTML
+// sent from our domain — escape it so it can't inject markup/links.
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+// Prevents a very long name from breaking the email layout.
+function truncate(input: string, max: number): string {
+  return input.length > max ? input.slice(0, max - 1) + '…' : input
+}
+
 function buildHtml(params: {
   org_name:    string
   inviter_name: string
@@ -33,11 +49,13 @@ function buildHtml(params: {
   invite_url:  string
   expires_at:  string
 }): string {
-  const { org_name, inviter_name, role, invite_url, expires_at } = params
-  const expiryDate = new Date(expires_at).toLocaleDateString('en-GB', {
+  const org_name     = escapeHtml(truncate(params.org_name, 100))
+  const inviter_name = escapeHtml(truncate(params.inviter_name, 100))
+  const invite_url   = escapeHtml(params.invite_url)
+  const expiryDate = new Date(params.expires_at).toLocaleDateString('en-GB', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
-  const roleLabel = role.charAt(0).toUpperCase() + role.slice(1)
+  const roleLabel = escapeHtml(params.role.charAt(0).toUpperCase() + params.role.slice(1))
 
   return `<!DOCTYPE html>
 <html lang="en">

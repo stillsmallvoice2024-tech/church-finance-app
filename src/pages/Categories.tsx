@@ -13,6 +13,7 @@ import {
   type Category, type CategoryGroup, type CategoryOpeningBalance, type BudgetPortion,
 } from '../hooks/useCategories'
 import { CurrencyInput } from '../components/ui/CurrencyInput'
+import { invalidateFundBuckets } from '../utils/fundBuckets'
 import {
   useAddCategory,
   useUpdateCategory,
@@ -38,6 +39,7 @@ import {
 } from '../hooks/useOutflowTypes'
 import { useOrgCurrency } from '../hooks/useOrgCurrency'
 import { useOrgStore }    from '../store/orgStore'
+import { countCategoryReferences } from '../utils/categoryReferences'
 import { useBanks }       from '../hooks/useBanks'
 import { HelpButton }      from '../components/onboarding/HelpButton'
 import { PageHelpBanner }  from '../components/ui/PageHelpBanner'
@@ -80,12 +82,13 @@ const CAT_SORT_FIELDS = deriveSortFields(CAT_COLUMNS)
 async function categoryHasLinkedData(cat: Category): Promise<boolean> {
   const { orgId } = useOrgStore.getState()
   if (!orgId) return false
-  const [inf, out, cob] = await Promise.all([
-    supabase.from('inflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('stage_code_1', cat.name),
-    supabase.from('outflow_transactions').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('stage_code_1', cat.name),
-    supabase.from('category_opening_balances').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('category_id', cat.id),
-  ])
-  return (inf.count ?? 0) > 0 || (out.count ?? 0) > 0 || (cob.count ?? 0) > 0
+  try {
+    const refs = await countCategoryReferences(orgId, cat.id, cat.name)
+    return refs.total > 0
+  } catch {
+    // Fail closed — offer "hide" rather than risk orphaning the fund's money.
+    return true
+  }
 }
 
 // ── Category form modal ────────────────────────────────────────────────────────
@@ -222,6 +225,9 @@ function CategoryModal({ open, onClose, onSuccess, editRecord, groups, onGroupCr
         for (const row of validRows) {
           await upsertCategoryOpeningBalance(savedId, row.budget_portion as BudgetPortion, parseFloat(row.amount), orgId)
         }
+        // Opening balances feed the fund buckets but bump no transaction-sync
+        // version, so the shared cache has to be dropped explicitly.
+        invalidateFundBuckets()
       } catch (obErr) {
         const msg = obErr instanceof Error ? obErr.message : String(obErr)
         console.error('[CategoryModal] ob upsert failed', msg)

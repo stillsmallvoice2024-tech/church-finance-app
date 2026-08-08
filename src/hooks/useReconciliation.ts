@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrgStore } from '../store/orgStore'
 import { useAuth } from './useAuth'
-import { runReconciliation, type ReconciliationResult, type ReconciliationIssue } from '../utils/reconciliationEngine'
+import { runReconciliation, type ReconciliationResult, type ReconciliationIssue, type FailedRule } from '../utils/reconciliationEngine'
 import { ALL_RULES } from '../utils/reconciliationRules'
 import { aggregateDiagnostics, type HealthStatus } from '../utils/reconciliationAggregator'
 import { useHealthStore } from '../store/healthStore'
@@ -50,16 +50,30 @@ export function useReconciliation() {
     ;(async () => {
       const { data, error } = await supabase
         .from('reconciliation_runs')
-        .select('run_at, issues_json')
+        .select('run_at, issues_json, health_status')
         .eq('org_id', orgId)
         .order('run_at', { ascending: false })
         .limit(1)
         .single()
       if (error || !data) return
-      const row    = data as { run_at: string; issues_json: unknown }
+      const row    = data as { run_at: string; issues_json: unknown; health_status: HealthStatus | null }
       const issues = (Array.isArray(row.issues_json) ? row.issues_json : []) as ReconciliationIssue[]
-      const restored: ReconciliationResult = { issues, runAt: row.run_at, durationMs: 0 }
-      setResults(restored, aggregateDiagnostics(issues), orgId)
+
+      // A run stored as incomplete must stay incomplete on restore. We no
+      // longer know which rules failed, so carry a single placeholder — the
+      // point is that the run must not be re-derived as "healthy".
+      const failedRules: FailedRule[] = row.health_status === 'incomplete'
+        ? [{ ruleId: 'unknown', ruleName: 'one or more checks', message: 'failed during the saved run' }]
+        : []
+
+      const restored: ReconciliationResult = {
+        issues,
+        failedRules,
+        partial: failedRules.length > 0,
+        runAt: row.run_at,
+        durationMs: 0,
+      }
+      setResults(restored, aggregateDiagnostics(issues, failedRules), orgId)
     })()
   }, [orgId, storeResult, setResults])
 
@@ -69,7 +83,17 @@ export function useReconciliation() {
     setError(null)
     try {
       const res  = await runReconciliation(orgId, ALL_RULES)
-      const diag = aggregateDiagnostics(res.issues)
+      const diag = aggregateDiagnostics(res.issues, res.failedRules)
+
+      // Surface partial runs as an error banner too — the grey "Unverified"
+      // badge alone is easy to mistake for "nothing to report".
+      if (res.partial) {
+        setError(
+          `${res.failedRules.length} of ${ALL_RULES.length} checks could not run ` +
+          `(${diag.failedRuleNames.join(', ')}). Results are incomplete — ` +
+          `problems may exist that were not detected. Try again.`,
+        )
+      }
 
       useHealthStore.getState().setHealth(diag.healthStatus, res.runAt)
       setResults(res, diag, orgId)

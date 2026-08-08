@@ -440,3 +440,49 @@ describe('H8: MISSING_COL_RE silent retry is removed', () => {
     expect(fnSig).not.toContain('strippedCols')
   })
 })
+
+// ── LB-5/S-C2: schema.sql fresh-install path matches the multi-tenant fix ────
+// A database provisioned from schema.sql (disaster recovery, staging, a new
+// region) must come up with the same tenant-isolation behaviour as the live,
+// migrated database — not the pre-fix state the migrations already replaced.
+
+describe('LB-5/S-C2: schema.sql get_current_org_id matches the migrated fix', () => {
+  const schema = sql('supabase/schema.sql')
+  const fix    = migration('20260605000001_fix_null_org_id.sql')
+
+  const fnSection = () => schema.slice(
+    schema.indexOf('create or replace function public.get_current_org_id()'),
+    schema.indexOf('$$;', schema.indexOf('create or replace function public.get_current_org_id()')),
+  )
+
+  it('schema.sql no longer resolves org_id to a shared "primary" org', () => {
+    expect(fnSection()).not.toContain("slug = 'primary'")
+  })
+
+  it('schema.sql raises instead of silently returning a bootstrap org_id', () => {
+    expect(fnSection()).toContain('raise exception')
+    expect(fnSection()).toContain('must supply org_id explicitly')
+  })
+
+  it('migration and schema.sql raise the same class of error', () => {
+    expect(fix).toContain('must supply org_id explicitly')
+  })
+
+  it('schema.sql does not seed a bootstrap "My Church" / primary organisation', () => {
+    expect(schema).not.toContain("'My Church', 'primary'")
+    expect(schema).not.toMatch(/insert into public\.organizations[\s\S]{0,80}'primary'/i)
+  })
+
+  it('audit_log.org_id and field_changes.org_id are NOT NULL, matching the migration', () => {
+    const auditLogTable = schema.slice(
+      schema.indexOf('create table public.audit_log'),
+      schema.indexOf(');', schema.indexOf('create table public.audit_log')),
+    )
+    const fieldChangesTable = schema.slice(
+      schema.indexOf('create table public.field_changes'),
+      schema.indexOf(');', schema.indexOf('create table public.field_changes')),
+    )
+    expect(auditLogTable).toMatch(/org_id\s+uuid\s+not null/)
+    expect(fieldChangesTable).toMatch(/org_id\s+uuid\s+not null/)
+  })
+})

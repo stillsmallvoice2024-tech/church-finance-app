@@ -39,6 +39,14 @@ interface OrgState {
   importedRowsPeriodStart: string | null
   planStatus:          PlanStatus | null
   trialEndsAt:         string | null
+  /**
+   * True once a membership row has actually been applied, so `planTier`
+   * reflects the database rather than "we haven't asked yet". usePlan()
+   * needs the distinction: since enforcement now fails CLOSED, an unknown
+   * tier must render as "still loading", not as the free tier — otherwise
+   * a paid org flashes locked on every page load.
+   */
+  planLoaded:          boolean
   memberships:         OrgMembership[]
   switching:           boolean
 
@@ -73,6 +81,7 @@ export const useOrgStore = create<OrgState>((set) => ({
   importedRowsPeriodStart: null,
   planStatus:         null,
   trialEndsAt:        null,
+  planLoaded:         false,
   memberships:        [],
   switching:          false,
 
@@ -87,15 +96,16 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgDeletedAt:       m.org_deleted_at ?? null,
     orgPurgeAt:         m.org_purge_at ?? null,
     orgType:            m.org_type !== undefined ? (m.org_type ?? null) : null,
-    // null (schema not yet migrated, or column not selected) is treated as
-    // "unknown" by usePlan() and fails open to full access — never lock out
-    // an org just because the plan_tier column hasn't landed on its DB yet.
+    // null = schema not yet migrated, or column not selected. Enforcement
+    // lives in RLS now, so usePlan() resolves this to the free tier rather
+    // than failing open to full access — see resolveEffectiveTier().
     planTier:           m.plan_tier !== undefined ? (m.plan_tier ?? null) : null,
     planExpiresAt:      m.plan_expires_at !== undefined ? (m.plan_expires_at ?? null) : null,
     importedRowsCount:  m.imported_rows_count ?? 0,
     importedRowsPeriodStart: m.imported_rows_period_start ?? null,
     planStatus:         m.plan_status !== undefined ? (m.plan_status ?? null) : null,
     trialEndsAt:        m.trial_ends_at !== undefined ? (m.trial_ends_at ?? null) : null,
+    planLoaded:         true,
   }),
 
   setMemberships: (ms) => set({ memberships: ms }),
@@ -113,7 +123,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     ? { importedRowsCount: count, importedRowsPeriodStart: periodStart }
     : { importedRowsCount: count }),
 
-  setPlanTier: (tier, expiresAt = null) => set({ planTier: tier, planExpiresAt: expiresAt }),
+  setPlanTier: (tier, expiresAt = null) => set({ planTier: tier, planExpiresAt: expiresAt, planLoaded: true }),
 
   setSwitching: (v) => set({ switching: v }),
 
@@ -123,7 +133,7 @@ export const useOrgStore = create<OrgState>((set) => ({
     orgStatus: null, orgDeletedAt: null, orgPurgeAt: null,
     orgType: null, planTier: null, planExpiresAt: null, importedRowsCount: 0,
     importedRowsPeriodStart: null,
-    planStatus: null, trialEndsAt: null,
+    planStatus: null, trialEndsAt: null, planLoaded: false,
     memberships: [], switching: false,
   }),
 

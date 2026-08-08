@@ -371,6 +371,12 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# username-auth is called from the login screen, before anyone has a session.
+# It must accept unauthenticated requests, so platform JWT verification is off;
+# the function does its own rate limiting and credential checking instead.
+[functions.username-auth]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

@@ -57,8 +57,13 @@ function AdminOnlyGuard() {
 
 // Redirects to the Billing tab (with a ?locked= flag it reads to explain why)
 // when the active org's plan doesn't unlock the given feature.
+//
+// hasFeature() fails closed, so the planLoading check is not cosmetic here:
+// without it a paying org deep-linking to a gated page would be bounced to
+// Billing before its tier had even been fetched.
 function FeatureGuard({ feature }: { feature: PlanFeature }) {
-  const { hasFeature } = usePlan()
+  const { hasFeature, planLoading } = usePlan()
+  if (planLoading) return null
   if (!hasFeature(feature)) return <Navigate to={`/settings?tab=billing&locked=${feature}`} replace />
   return <Outlet />
 }
