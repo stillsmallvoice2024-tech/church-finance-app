@@ -36,6 +36,7 @@ import { ButtonSpinner } from '../ui/ButtonSpinner'
 import { isOffsetableType } from '../../utils/transactionTypes'
 import { BUDGET_PORTIONS } from '../../utils/constants'
 import { friendlyError } from '../../utils/friendlyError'
+import { describeImportError, MISSING_COLUMN_RE } from '../../utils/importErrors'
 // Shared with Import.tsx — a divergent second copy would break dedup silently,
 // since Set.has() is byte-exact.
 import { normalizeId } from '../../utils/normalizeId'
@@ -248,6 +249,10 @@ interface ImportResult {
    * and no way to finish the rest short of re-importing everything.
    */
   failedRows?:     { inflows: Record<string, unknown>[]; outflows: Record<string, unknown>[] }
+  /** Raw Postgres/Supabase messages behind `errors`, for a support-only panel. */
+  technicalErrors?: string[]
+  /** Id every row of this run was stamped with — lets "Undo this import" target exactly this run. */
+  importBatchId?:   string
 }
 
 interface ImportTemplate {
@@ -1256,7 +1261,10 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
             const split = await insertBatchResilient(async r => supabase.from(table).insert(r), batch)
             imported += split.imported
             bucket.push(...split.failed)
-            for (const m of new Set(split.errors)) errors.push(`${table}: ${m}`)
+            for (const m of new Set(split.errors)) {
+              const info = describeImportError({ message: m })
+              errors.push(`${info.message} (code: ${info.code})`)
+            }
           } else imported += batch.length
         }
       }
@@ -1278,6 +1286,46 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       setResult(prev => prev && ({ ...prev, errors: [...prev.errors, friendlyError(e, 'retry failed rows')] }))
     } finally {
       setRetrying(false)
+    }
+  }, [result, toast])
+
+  // ── Undo an import run ──────────────────────────────────────────────────────
+  // Deletes every row stamped with this run's import_batch_id, so a run that
+  // went wrong (schema error mid-run, statement imported by mistake, etc.)
+  // can be cleanly removed in one click instead of hand-picking rows.
+  const [undoing, setUndoing] = useState(false)
+  const undoImport = useCallback(async () => {
+    const batchId = result?.importBatchId
+    if (!batchId) return
+    setUndoing(true)
+    try {
+      const [{ error: inErr, count: inCount }, { error: outErr, count: outCount }] = await Promise.all([
+        supabase.from('inflow_transactions').delete({ count: 'exact' }).eq('import_batch_id', batchId),
+        supabase.from('outflow_transactions').delete({ count: 'exact' }).eq('import_batch_id', batchId),
+      ])
+      if (inErr || outErr) {
+        toast.error(friendlyError(inErr ?? outErr, 'undo this import'))
+        return
+      }
+      await supabase.from('import_batches')
+        .update({ status: 'undone', undone_at: new Date().toISOString() })
+        .eq('id', batchId)
+      const removed = (inCount ?? 0) + (outCount ?? 0)
+      if (removed > 0) {
+        useTransactionSyncStore.getState().bumpInflow()
+        useTransactionSyncStore.getState().bumpOutflow()
+      }
+      setResult(prev => prev && ({
+        ...prev,
+        imported: Math.max(0, prev.imported - removed),
+        errors: [...prev.errors, `Undone — ${removed.toLocaleString()} row(s) removed.`],
+        importBatchId: undefined,
+      }))
+      toast.success(`Undone — ${removed.toLocaleString()} row(s) removed`)
+    } catch (e) {
+      toast.error(friendlyError(e, 'undo this import'))
+    } finally {
+      setUndoing(false)
     }
   }, [result, toast])
 
@@ -1494,6 +1542,12 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       inflowToInsert  = stampCategoryId(inflowToInsert)
       outflowToInsert = stampCategoryId(outflowToInsert)
 
+      // Every row of this run carries the same id so a failed/aborted run can
+      // be identified and undone as a unit (see "Undo this import" below).
+      const importBatchId = crypto.randomUUID()
+      inflowToInsert  = inflowToInsert.map(r => ({ ...r, import_batch_id: importBatchId }))
+      outflowToInsert = outflowToInsert.map(r => ({ ...r, import_batch_id: importBatchId }))
+
       const skippedDups = (inflowRows.length - inflowToInsert.length) + (outflowRows.length - outflowToInsert.length)
       if (skippedDups > 0) { skipped += skippedDups; errors.push(`${skippedDups} duplicate(s) skipped`) }
 
@@ -1532,87 +1586,62 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
       // Rows from batches that failed, so the user can retry just those.
       const failedInflows:  Record<string, unknown>[] = []
       const failedOutflows: Record<string, unknown>[] = []
+      const technicalErrors: string[] = []
+      // A missing column is a setup problem, not a bad row — stripping the
+      // field and continuing used to silently drop it from every row
+      // (money landing unallocated while the screen reported success).
+      // Instead: stop importing the moment it's detected. Rows already
+      // inserted earlier in this run stay (each is tagged with
+      // importBatchId), so "Undo this import" can remove them as a unit.
+      let fatalSchemaError = false
 
-      const MISSING_COL_SQL: Record<string, string> = {
-        allocation_config_id:
-          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS allocation_config_id uuid;\n' +
-          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS allocation_config_id uuid;',
-        income_type_id:
-          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS income_type_id uuid;\n' +
-          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS income_type_id uuid;',
-        category_id:
-          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES categories(id) ON DELETE SET NULL;\n' +
-          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES categories(id) ON DELETE SET NULL;',
-        recorded_at:
-          'ALTER TABLE inflow_transactions  ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
-          'UPDATE inflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
-          'ALTER TABLE outflow_transactions ADD COLUMN IF NOT EXISTS recorded_at timestamptz;\n' +
-          'UPDATE outflow_transactions SET recorded_at = created_at WHERE recorded_at IS NULL;\n' +
-          "NOTIFY pgrst, 'reload schema';",
-      }
-      const missingColMsg = (col: string) => {
-        const sql = MISSING_COL_SQL[col]
-        return sql
-          ? `⚠ ${col} column missing — run in Supabase SQL Editor:\n${sql}`
-          : `⚠ ${col} column missing — run DB migration to add this column`
+      const pushImportError = (err: { message: string }) => {
+        const info = describeImportError(err)
+        if (!errors.some(e => e.includes(info.code))) errors.push(`${info.message} (code: ${info.code})`)
+        technicalErrors.push(info.technical)
+        return info
       }
 
-      for (let i = 0; i < inflowToInsert.length; i += BATCH) {
+      for (let i = 0; i < inflowToInsert.length && !fatalSchemaError; i += BATCH) {
         const batch = inflowToInsert.slice(i, i + BATCH)
-        let { error: err } = await supabase.from('inflow_transactions').insert(batch)
-        let rowsToRetry = batch
-        const missingInflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
-        if (missingInflow) {
-          rowsToRetry = batch.map(row => { const r = { ...row }; delete r[missingInflow]; return r })
-          const { error: retryErr } = await supabase.from('inflow_transactions').insert(rowsToRetry)
-          err = retryErr ?? null
-          if (!errors.some(e => e.includes(missingInflow))) {
-            errors.push(missingColMsg(missingInflow))
-          }
+        const { error: err } = await supabase.from('inflow_transactions').insert(batch)
+        if (err && MISSING_COLUMN_RE.test(err.message)) {
+          pushImportError(err)
+          fatalSchemaError = true
+          skipped += inflowToInsert.length - i
+          break
         }
         if (err) {
           // A single bad row fails the whole 250-row batch (multi-row INSERT
           // is atomic) — split down to isolate it instead of losing every
           // good row (and the fund breakdown they were configured with).
           const split = await insertBatchResilient(
-            async rows => supabase.from('inflow_transactions').insert(rows), rowsToRetry,
+            async rows => supabase.from('inflow_transactions').insert(rows), batch,
           )
           imported += split.imported
           skipped  += split.failed.length
           failedInflows.push(...split.failed)
-          for (const m of new Set(split.errors)) {
-            errors.push(m.includes('invalid input syntax for type uuid')
-              ? 'Schema error: ALTER TABLE inflow_transactions ALTER COLUMN transaction_ref TYPE text;'
-              : `Inflow row: ${m}`)
-          }
+          for (const m of new Set(split.errors)) pushImportError({ message: m })
         } else imported += batch.length
         setProgress(total > 0 ? Math.round(((i + batch.length) / total) * 50) : 50)
       }
-      for (let i = 0; i < outflowToInsert.length; i += BATCH) {
+      for (let i = 0; i < outflowToInsert.length && !fatalSchemaError; i += BATCH) {
         const batch = outflowToInsert.slice(i, i + BATCH)
-        let { error: err } = await supabase.from('outflow_transactions').insert(batch)
-        let rowsToRetry = batch
-        const missingOutflow = err?.message.match(/Could not find (?:the ')?(\w+)'? column/)?.[1]
-        if (missingOutflow) {
-          rowsToRetry = batch.map(row => { const r = { ...row }; delete r[missingOutflow]; return r })
-          const { error: retryErr } = await supabase.from('outflow_transactions').insert(rowsToRetry)
-          err = retryErr ?? null
-          if (!errors.some(e => e.includes(missingOutflow))) {
-            errors.push(missingColMsg(missingOutflow))
-          }
+        const { error: err } = await supabase.from('outflow_transactions').insert(batch)
+        if (err && MISSING_COLUMN_RE.test(err.message)) {
+          pushImportError(err)
+          fatalSchemaError = true
+          skipped += outflowToInsert.length - i
+          break
         }
         if (err) {
           const split = await insertBatchResilient(
-            async rows => supabase.from('outflow_transactions').insert(rows), rowsToRetry,
+            async rows => supabase.from('outflow_transactions').insert(rows), batch,
           )
           imported += split.imported
           skipped  += split.failed.length
           failedOutflows.push(...split.failed)
-          for (const m of new Set(split.errors)) {
-            errors.push(m.includes('invalid input syntax for type uuid')
-              ? 'Schema error: ALTER TABLE outflow_transactions ALTER COLUMN transaction_id TYPE text;'
-              : `Outflow row: ${m}`)
-          }
+          for (const m of new Set(split.errors)) pushImportError({ message: m })
         } else imported += batch.length
         setProgress(total > 0 ? 50 + Math.round(((i + batch.length) / total) * 50) : 100)
       }
@@ -1640,12 +1669,28 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
         }
       }
 
+      // Record the run so "Undo this import" can target exactly these rows.
+      if (imported > 0) {
+        const { error: batchErr } = await supabase.from('import_batches').insert({
+          id:           importBatchId,
+          org_id:       orgId,
+          target_table: targetTable,
+          file_name:    fileName || null,
+          row_count:    imported,
+          status:       fatalSchemaError || failedInflows.length || failedOutflows.length ? 'partial' : 'completed',
+          created_by:   userId,
+        })
+        if (batchErr) console.error('[import] failed to record import batch', batchErr.message)
+      }
+
       importCompletedRef.current = true
       setResult({
         imported, skipped, errors, fallbackIdCount, collisions,
         failedRows: (failedInflows.length || failedOutflows.length)
           ? { inflows: failedInflows, outflows: failedOutflows }
           : undefined,
+        technicalErrors: technicalErrors.length > 0 ? technicalErrors : undefined,
+        importBatchId: imported > 0 ? importBatchId : undefined,
       })
 
       // Auto-detect closing balance from the mapped balance column and save silently.
@@ -3888,8 +3933,33 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
                   )
                 })()}
                 {result.errors.length > 0 && (
-                  <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
+                  <div className="mt-2 max-h-28 overflow-y-auto text-xs text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5">
                     {result.errors.map((e, i) => <div key={i} className="whitespace-pre-wrap">{e}</div>)}
+                  </div>
+                )}
+                {result.technicalErrors && result.technicalErrors.length > 0 && (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer text-amber-700 select-none">Technical details (for support)</summary>
+                    <div className="mt-1 max-h-28 overflow-y-auto text-amber-700 bg-amber-100 rounded-lg p-3 space-y-0.5 font-mono">
+                      {result.technicalErrors.map((e, i) => <div key={i} className="whitespace-pre-wrap">{e}</div>)}
+                    </div>
+                  </details>
+                )}
+                {result.importBatchId && result.imported > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <span className="text-xs text-gray-600">
+                      Made a mistake, or something look wrong? You can remove exactly the
+                      {' '}{result.imported.toLocaleString()} row(s) this import just added.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={undoImport}
+                      disabled={undoing}
+                      className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                    >
+                      {undoing && <ButtonSpinner />}
+                      {undoing ? 'Undoing…' : 'Undo this import'}
+                    </button>
                   </div>
                 )}
                 {result.collisions.length > 0 && (
