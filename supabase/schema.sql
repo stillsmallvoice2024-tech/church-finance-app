@@ -2411,24 +2411,67 @@ begin
 end;
 $$;
 
-create or replace function public.trg_ledger_balance_fn()
+-- FOR EACH STATEMENT (not ROW): a bulk import firing N row events would
+-- otherwise trigger N full-account recomputes. These use transition tables
+-- to recompute each affected account once per statement instead. Postgres
+-- does not allow a single trigger to declare transition tables while firing
+-- on more than one event, so insert/update/delete are separate triggers.
+create or replace function public.trg_ledger_balance_ins_fn()
 returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
 begin
-  if tg_op = 'DELETE' then
-    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
-  elsif tg_op = 'UPDATE' and old.account_id is distinct from new.account_id then
-    perform public.recalculate_ledger_balances(old.account_id, old.org_id);
-    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
-  else
-    perform public.recalculate_ledger_balances(new.account_id, new.org_id);
-  end if;
+  for r in select distinct account_id, org_id from new_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
   return null;
 end;
 $$;
 
-create trigger trg_ledger_balance
-  after insert or update or delete on public.ledger_entries
-  for each row execute function public.trg_ledger_balance_fn();
+create or replace function public.trg_ledger_balance_upd_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+begin
+  for r in
+    select distinct account_id, org_id from new_rows where account_id is not null
+    union
+    select distinct account_id, org_id from old_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
+  return null;
+end;
+$$;
+
+create or replace function public.trg_ledger_balance_del_fn()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  r record;
+begin
+  for r in select distinct account_id, org_id from old_rows where account_id is not null
+  loop
+    perform public.recalculate_ledger_balances(r.account_id, r.org_id);
+  end loop;
+  return null;
+end;
+$$;
+
+create trigger trg_ledger_balance_ins
+  after insert on public.ledger_entries
+  referencing new table as new_rows
+  for each statement execute function public.trg_ledger_balance_ins_fn();
+
+create trigger trg_ledger_balance_upd
+  after update on public.ledger_entries
+  referencing new table as new_rows old table as old_rows
+  for each statement execute function public.trg_ledger_balance_upd_fn();
+
+create trigger trg_ledger_balance_del
+  after delete on public.ledger_entries
+  referencing old table as old_rows
+  for each statement execute function public.trg_ledger_balance_del_fn();
 
 create or replace function public.trg_account_opening_balance_fn()
 returns trigger language plpgsql security definer set search_path = public as $$
@@ -4217,8 +4260,7 @@ CREATE POLICY "restore_allowed_tables_select" ON public.restore_allowed_tables
 WITH seed (table_key, insert_order, conflict_column, org_scoped, delete_in_replace, conflict_action) AS (
   VALUES
     -- Configuration
-    ('organizations'::text,               0::integer, 'id'::text,   false, false, 'update'::text),
-    ('currencies',                        1, 'id',   true,  true,  'update'),
+    ('currencies'::text,                  1::integer, 'id'::text,   true,  true,  'update'::text),
     ('category_groups',                   2, 'id',   true,  true,  'update'),
     ('categories',                        3, 'id',   true,  true,  'update'),
     ('category_opening_balances',         4, 'id',   true,  true,  'update'),
