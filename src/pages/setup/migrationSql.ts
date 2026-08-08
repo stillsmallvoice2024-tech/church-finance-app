@@ -1,6 +1,9 @@
 // Historical migration SQL for existing self-hosted databases.
 // Canonical copies live in supabase/migrations/. Kept exported for reference.
 
+// SUPERSEDED by supabase/migrations/20260807000001_org_scope_currencies.sql,
+// which replaces this global table with a per-organisation one. Kept only as a
+// record of the original shape — do not run it on a current database.
 export const CURRENCIES_MIGRATION_SQL =
 `-- Create currencies table
 CREATE TABLE IF NOT EXISTS public.currencies (
