@@ -3,8 +3,14 @@
 // Swap OCR_PROVIDER env var to change providers without touching frontend code.
 //
 // Deploy: supabase functions deploy pdf-ocr
-// Required env vars: ANTHROPIC_API_KEY
-// Optional:          OCR_PROVIDER (default: 'anthropic')
+// Required env vars: ANTHROPIC_API_KEY   (when OCR_PROVIDER = 'anthropic', the default)
+//                    OPENAI_API_KEY      (when OCR_PROVIDER = 'openai')
+// Optional:          OCR_PROVIDER        ('anthropic' | 'openai', default: 'anthropic')
+//                    OPENAI_OCR_MODEL    (default: 'gpt-4o')
+//
+// Provider choice is server-side only: the plan gate, role gate, daily page
+// quota and size cap all live in the request handler below, outside the
+// provider, so they apply identically whichever one is selected.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -12,6 +18,8 @@ const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const OCR_PROVIDER         = Deno.env.get('OCR_PROVIDER') ?? 'anthropic'
 const ANTHROPIC_API_KEY    = Deno.env.get('ANTHROPIC_API_KEY')
+const OPENAI_API_KEY       = Deno.env.get('OPENAI_API_KEY')
+const OPENAI_OCR_MODEL     = Deno.env.get('OPENAI_OCR_MODEL') ?? 'gpt-4o'
 
 /**
  * Ceiling on the upstream call. Comfortably inside the edge runtime's own
@@ -26,9 +34,9 @@ const UPSTREAM_TIMEOUT_MS = 55_000
  * Each call is a billed request at up to 8,000 tokens, so an uncapped
  * payload is an uncapped bill. 8 MB of base64 is ~6 MB of PNG — far above
  * anything renderPageToBase64 produces for a statement page at the model's
- * resolution cap, and below Anthropic's own 5 MB-per-image decode limit
- * closely enough that oversized input fails here, cheaply, rather than
- * upstream after the request has been paid for.
+ * resolution cap, and under every supported provider's own per-image decode
+ * limit, so oversized input fails here, cheaply, rather than upstream after
+ * the request has been paid for.
  */
 const MAX_IMAGE_B64_BYTES = 8 * 1024 * 1024
 
@@ -53,6 +61,40 @@ interface OcrResult {
 }
 
 type OcrProviderFn = (image: string, mimeType: string) => Promise<OcrResult>
+
+// ── Shared provider plumbing ──────────────────────────────────────────────────
+
+/**
+ * Rethrows an abort as the sentence the operator actually sees.
+ *
+ * An abort here means the model was still working when the budget ran out.
+ * Say so plainly — "took too long" points at a different fix than "the request
+ * was rejected", and being killed by the platform instead gives the browser a
+ * bare transport failure with no status and no body.
+ */
+function rethrowUpstream(e: unknown): never {
+  if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
+    throw new Error(
+      `Extraction timed out after ${Math.round(UPSTREAM_TIMEOUT_MS / 1000)}s on this page. ` +
+      'Retry, or reduce the page image size.',
+    )
+  }
+  throw e
+}
+
+/**
+ * Pulls the OcrResult out of a model's text response.
+ *
+ * Shared because every provider is asked for the same JSON and every one of
+ * them occasionally wraps it in a markdown fence or a sentence of preamble
+ * regardless of how firmly the prompt says not to.
+ */
+function parseOcrJson(text: string): OcrResult {
+  const stripped  = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/)
+  if (!jsonMatch) throw new Error('OCR response contained no valid JSON')
+  return JSON.parse(jsonMatch[0]) as OcrResult
+}
 
 // ── Anthropic provider ────────────────────────────────────────────────────────
 
@@ -131,16 +173,7 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
       }),
     })
   } catch (e) {
-    // An abort here means the model was still working when the budget ran out.
-    // Say so plainly — the caller surfaces this text, and "took too long" points
-    // at a different fix than "the request was rejected".
-    if (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')) {
-      throw new Error(
-        `Extraction timed out after ${Math.round(UPSTREAM_TIMEOUT_MS / 1000)}s on this page. ` +
-        'Retry, or reduce the page image size.',
-      )
-    }
-    throw e
+    rethrowUpstream(e)
   }
 
   if (!res.ok) {
@@ -149,14 +182,73 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
   }
 
   const json = await res.json() as { content: Array<{ type: string; text: string }> }
-  const text  = json.content.find(c => c.type === 'text')?.text ?? ''
+  return parseOcrJson(json.content.find(c => c.type === 'text')?.text ?? '')
+}
 
-  // Strip optional markdown fences that Claude sometimes adds
-  const stripped   = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-  const jsonMatch  = stripped.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) throw new Error('OCR response contained no valid JSON')
+// ── OpenAI provider ───────────────────────────────────────────────────────────
 
-  return JSON.parse(jsonMatch[0]) as OcrResult
+async function openaiProvider(image: string, mimeType: string): Promise<OcrResult> {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY is not configured')
+
+  const abort = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      signal: abort,
+      headers: {
+        'authorization': `Bearer ${OPENAI_API_KEY}`,
+        'content-type':  'application/json',
+      },
+      body: JSON.stringify({
+        model: OPENAI_OCR_MODEL,
+        // Transcription, not reasoning — the table is right there on the page.
+        // Any creativity here shows up as "corrected" figures in a ledger.
+        temperature: 0,
+        // Asks for a JSON object rather than parsing one out of prose. The
+        // fence-stripping in parseOcrJson still runs as a belt-and-braces
+        // fallback, since this mode guarantees valid JSON but not the shape.
+        response_format: { type: 'json_object' },
+        // Matches the Anthropic budget: a page of transactions plus its
+        // per-cell confidence array needs the headroom, and more than this
+        // invites generations long enough to blow the time budget.
+        max_tokens: 8000,
+        messages: [{
+          role: 'user',
+          content: [
+            // OpenAI takes the image as a data: URL rather than a separate
+            // base64 field — same bytes, different envelope.
+            { type: 'image_url', image_url: { url: `data:${mimeType};base64,${image}` } },
+            { type: 'text',      text: EXTRACTION_PROMPT },
+          ],
+        }],
+      }),
+    })
+  } catch (e) {
+    rethrowUpstream(e)
+  }
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`OpenAI API error ${res.status}: ${body.slice(0, 200)}`)
+  }
+
+  const json = await res.json() as {
+    choices: Array<{ message: { content: string | null }; finish_reason: string }>
+  }
+  const choice = json.choices?.[0]
+
+  // A truncated response parses as "no valid JSON", which reads as a bad model
+  // reply rather than a page that simply had more rows than the budget allowed.
+  if (choice?.finish_reason === 'length') {
+    throw new Error(
+      'The model ran out of output budget partway through this page. ' +
+      'Retry, or split the statement into fewer pages per file.',
+    )
+  }
+
+  return parseOcrJson(choice?.message?.content ?? '')
 }
 
 // ── Provider factory ──────────────────────────────────────────────────────────
@@ -166,6 +258,7 @@ async function anthropicProvider(image: string, mimeType: string): Promise<OcrRe
 function getProvider(): OcrProviderFn {
   switch (OCR_PROVIDER) {
     case 'anthropic': return anthropicProvider
+    case 'openai':    return openaiProvider
     // case 'mistral':   return mistralProvider
     default: throw new Error(`Unknown OCR_PROVIDER: "${OCR_PROVIDER}"`)
   }
