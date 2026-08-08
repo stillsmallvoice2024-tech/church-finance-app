@@ -415,7 +415,7 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
   // whenever a different file or a different tab within one file is selected.
   const [dateFormatDetection, setDateFormatDetection] = useState<DetectionResult | null>(null)
   const [dateFormatOverridden, setDateFormatOverridden] = useState(false)
-  const detectedForSheetRef = useRef<string | null>(null)
+  const detectedForSheetRef = useRef<{ sheet: ParsedSheet | null; dateIdx: number } | null>(null)
 
   // FX currency (Phase B)
   const [fxCurrency, setFxCurrency] = useState('')
@@ -1083,9 +1083,13 @@ export function ImportModal({ open, onClose, skipTxnIds, skipTxnBankName, bank, 
     if (!sheet || !config) return
     const dateIdx = sheet.headers.findIndex(h => mapping[h] === 'date')
     if (dateIdx < 0) return
-    const detectionKey = `${sheet.name}:${dateIdx}`
-    if (detectedForSheetRef.current === detectionKey) return
-    detectedForSheetRef.current = detectionKey
+    // Keyed on the sheet OBJECT, not its name: two different uploads sharing
+    // the same default sheet name ("Sheet1") and the same date-column index
+    // otherwise looked identical to this guard, so the second file silently
+    // never got detected at all.
+    const prev = detectedForSheetRef.current
+    if (prev && prev.sheet === sheet && prev.dateIdx === dateIdx) return
+    detectedForSheetRef.current = { sheet, dateIdx }
     setDateFormatOverridden(false)
 
     const displaySource = sheet.displayRows.length > 0 ? sheet.displayRows : sheet.rows
